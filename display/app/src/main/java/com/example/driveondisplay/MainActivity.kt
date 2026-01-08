@@ -2,31 +2,42 @@ package com.example.driveondisplay
 
 import android.app.Activity
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.view.WindowManager
 
 class MainActivity : Activity() {
 
-    private lateinit var renderView: RenderView
-    private lateinit var sensorClient: SensorClient
+    private lateinit var sensors: SensorClient
+    private lateinit var view: GForceView
+    private val state = GForceState()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Fullscreen real
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_FULLSCREEN,
-            WindowManager.LayoutParams.FLAG_FULLSCREEN
-        )
+        val metrics = resources.displayMetrics
+        val width = metrics.widthPixels
+        val height = metrics.heightPixels
+        Log.d("DriveOn", "Resolution: ${width}x${height}")
+
+
+        sensors = SensorClient(this, state)
+        view = GForceView(this, state)
+
+        setContentView(view)
+
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
         hideSystemUI()
+    }
 
-        renderView = RenderView(this)
-        setContentView(renderView)
+    override fun onResume() {
+        super.onResume()
+        sensors.start()
+    }
 
-        sensorClient = SensorClient(this)
-        sensorClient.start()
+    override fun onPause() {
+        super.onPause()
+        sensors.stop()
     }
 
     private fun hideSystemUI() {
@@ -34,10 +45,5 @@ class MainActivity : Activity() {
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
                     View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
                     View.SYSTEM_UI_FLAG_FULLSCREEN
-    }
-
-    override fun onDestroy() {
-        sensorClient.stop()
-        super.onDestroy()
     }
 }
