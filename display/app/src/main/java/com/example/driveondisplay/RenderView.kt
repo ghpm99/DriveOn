@@ -1,21 +1,31 @@
 package com.example.driveondisplay
 
 import android.content.Context
-import android.graphics.Canvas
-import android.graphics.Color
-import android.view.MotionEvent
+import android.graphics.*
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 
-class RenderView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
+class RenderView(context: Context) :
+    SurfaceView(context),
+    SurfaceHolder.Callback,
+    Runnable {
+
+    private var thread: Thread? = null
+    @Volatile private var running = false
 
     init {
         holder.addCallback(this)
-        isFocusable = true
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
-        drawPlaceholder(holder)
+        running = true
+        thread = Thread(this)
+        thread?.start()
+    }
+
+    override fun surfaceDestroyed(holder: SurfaceHolder) {
+        running = false
+        thread?.join()
     }
 
     override fun surfaceChanged(
@@ -25,22 +35,21 @@ class RenderView(context: Context) : SurfaceView(context), SurfaceHolder.Callbac
         height: Int
     ) {}
 
-    override fun surfaceDestroyed(holder: SurfaceHolder) {}
+    override fun run() {
+        val paint = Paint().apply {
+            color = Color.GREEN
+            textSize = 50f
+            isAntiAlias = true
+        }
 
-    private fun drawPlaceholder(holder: SurfaceHolder) {
-        val canvas: Canvas = holder.lockCanvas()
-        canvas.drawColor(Color.BLACK)
-        holder.unlockCanvasAndPost(canvas)
-    }
-
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        val x = event.x
-        val y = event.y
-        val action = event.action
-
-        // TODO: enviar touch para o notebook
-        // NetworkClient.sendTouch(x, y, action)
-
-        return true
+        while (running) {
+            val canvas = holder.lockCanvas()
+            if (canvas != null) {
+                canvas.drawRGB(20, 20, 20)
+                canvas.drawText("DriveOn MVP", 100f, 200f, paint)
+                holder.unlockCanvasAndPost(canvas)
+            }
+            Thread.sleep(16) // ~60 FPS
+        }
     }
 }
