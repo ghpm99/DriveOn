@@ -9,12 +9,14 @@ import (
 )
 
 type Renderer struct {
-	window   *sdl.Window
-	renderer *sdl.Renderer
-	font     *ttf.Font
-	lastTime time.Time
-	frames   int
-	fps      int
+	window            *sdl.Window
+	renderer          *sdl.Renderer
+	font              *ttf.Font
+	lastTime          time.Time
+	frames            int
+	fps               int
+	backgroundTexture *sdl.Texture
+	scene             int
 }
 
 func New(width, height int32) (*Renderer, error) {
@@ -53,11 +55,13 @@ func New(width, height int32) (*Renderer, error) {
 		renderer: r,
 		font:     font,
 		lastTime: time.Now(),
+		scene:    1,
 	}, nil
 }
 
 func (r *Renderer) Destroy() {
 	r.font.Close()
+	r.backgroundTexture.Destroy()
 	r.renderer.Destroy()
 	r.window.Destroy()
 	ttf.Quit()
@@ -66,8 +70,14 @@ func (r *Renderer) Destroy() {
 
 func (r *Renderer) Draw() error {
 	// fundo
-	r.renderer.SetDrawColor(20, 20, 20, 255)
+	if r.backgroundTexture == nil {
+
+		if err := r.InitTexture(); err != nil {
+			return err
+		}
+	}
 	r.renderer.Clear()
+	r.renderer.Copy(r.backgroundTexture, nil, nil)
 
 	r.updateFPS()
 	r.drawText(10, 10, "FPS: "+itoa(r.fps))
