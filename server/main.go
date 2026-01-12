@@ -2,6 +2,8 @@ package main
 
 import (
 	"log"
+	"math/rand"
+	"strconv"
 	"time"
 
 	"driveon/render"
@@ -38,6 +40,7 @@ func main() {
 				running = false
 			}
 		}
+		updateInfos(r)
 
 		if err := r.Draw(); err != nil {
 			log.Println(err)
@@ -45,4 +48,12 @@ func main() {
 
 		time.Sleep(time.Millisecond * 16) // ~60 FPS
 	}
+}
+
+func updateInfos(r *render.Renderer) {
+	r.Infos[0].SetValue(strconv.Itoa(rand.Intn(200)) + "km/h")
+	r.Infos[1].SetValue(strconv.Itoa(rand.Intn(7000)) + " RPM")
+	r.Infos[2].SetValue(strconv.Itoa(rand.Intn(100)) + "%")
+	r.Infos[3].SetValue(strconv.Itoa(rand.Intn(120)) + "°C")
+
 }

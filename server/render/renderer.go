@@ -18,7 +18,7 @@ type Renderer struct {
 	backgroundTexture *sdl.Texture
 	scene             int
 	width, height     int32
-	infos             []Info
+	Infos             []Info
 }
 
 func New(width, height int32) (*Renderer, error) {
@@ -83,9 +83,9 @@ func (r *Renderer) Draw() error {
 	r.renderer.Clear()
 	r.renderer.Copy(r.backgroundTexture, nil, nil)
 
-	if r.infos != nil {
+	if r.Infos != nil {
 		r.drawInfos(
-			r.infos,
+			r.Infos,
 			10,
 			80,
 			60,
@@ -137,5 +137,5 @@ func itoa(v int) string {
 }
 
 func (r *Renderer) SetInfos(infos []Info) {
-	r.infos = infos
+	r.Infos = infos
 }

@@ -12,6 +12,10 @@ func NewInfo(label, value string) Info {
 	}
 }
 
+func (i *Info) SetValue(value string) {
+	i.value = value
+}
+
 func (r *Renderer) drawInfos(infos []Info, startX, startY, lineHeight int32) error {
 
 	totalCards := len(infos)
