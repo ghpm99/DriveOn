@@ -21,6 +21,14 @@ func main() {
 	}
 	defer r.Destroy()
 
+	r.SetInfos([]render.Info{
+		render.NewInfo("Speed", "120km/h"),
+		render.NewInfo("RPM", "3000"),
+		render.NewInfo("Fuel", "50%"),
+		render.NewInfo("Temp", "90°C"),
+		render.NewInfo("Gear", "D"),
+	})
+
 	running := true
 
 	for running {

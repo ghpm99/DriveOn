@@ -17,6 +17,8 @@ type Renderer struct {
 	fps               int
 	backgroundTexture *sdl.Texture
 	scene             int
+	width, height     int32
+	infos             []Info
 }
 
 func New(width, height int32) (*Renderer, error) {
@@ -56,6 +58,8 @@ func New(width, height int32) (*Renderer, error) {
 		font:     font,
 		lastTime: time.Now(),
 		scene:    1,
+		width:    width,
+		height:   height,
 	}, nil
 }
 
@@ -78,6 +82,15 @@ func (r *Renderer) Draw() error {
 	}
 	r.renderer.Clear()
 	r.renderer.Copy(r.backgroundTexture, nil, nil)
+
+	if r.infos != nil {
+		r.drawInfos(
+			r.infos,
+			10,
+			80,
+			60,
+		)
+	}
 
 	r.updateFPS()
 	r.drawText(10, 10, "FPS: "+itoa(r.fps))
@@ -121,4 +134,8 @@ func (r *Renderer) drawText(x, y int32, text string) error {
 
 func itoa(v int) string {
 	return fmt.Sprintf("%d", v)
+}
+
+func (r *Renderer) SetInfos(infos []Info) {
+	r.infos = infos
 }
