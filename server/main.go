@@ -1,9 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
-	"strconv"
 	"time"
 
 	"driveon/render"
@@ -16,6 +16,17 @@ const (
 	screenHeight = 600
 )
 
+type Scene struct {
+	Infos []*render.Info
+}
+
+type SmoothValue struct {
+	Value int
+	Min   int
+	Max   int
+	Step  int
+}
+
 func main() {
 	r, err := render.New(screenWidth, screenHeight)
 	if err != nil {
@@ -23,12 +34,18 @@ func main() {
 	}
 	defer r.Destroy()
 
-	r.SetInfos([]render.Info{
-		render.NewInfo("Speed", "120km/h"),
-		render.NewInfo("RPM", "3000"),
-		render.NewInfo("Fuel", "50%"),
-		render.NewInfo("Temp", "90°C"),
-		render.NewInfo("Gear", "D"),
+	speed := render.NewInfo("Speed", "120 km/h")
+	rpm := render.NewInfo("RPM", "3000")
+	fuel := render.NewInfo("Fuel", "50%")
+	temp := render.NewInfo("Temp", "90°C")
+	gear := render.NewInfo("Gear", "D")
+
+	r.SetInfos([]*render.Info{
+		speed,
+		rpm,
+		fuel,
+		temp,
+		gear,
 	})
 
 	running := true
@@ -40,7 +57,7 @@ func main() {
 				running = false
 			}
 		}
-		updateInfos(r)
+		updateInfos(speed, rpm, fuel, temp)
 
 		if err := r.Draw(); err != nil {
 			log.Println(err)
@@ -50,10 +67,35 @@ func main() {
 	}
 }
 
-func updateInfos(r *render.Renderer) {
-	r.Infos[0].SetValue(strconv.Itoa(rand.Intn(200)) + "km/h")
-	r.Infos[1].SetValue(strconv.Itoa(rand.Intn(7000)) + " RPM")
-	r.Infos[2].SetValue(strconv.Itoa(rand.Intn(100)) + "%")
-	r.Infos[3].SetValue(strconv.Itoa(rand.Intn(120)) + "°C")
+func updateInfos(
+	speedInfo, rpmInfo, fuelInfo, tempInfo *render.Info,
+) {
+	var (
+		speed = SmoothValue{Value: 80, Min: 0, Max: 240, Step: 2}
+		rpm   = SmoothValue{Value: 2500, Min: 800, Max: 7000, Step: 150}
+		fuel  = SmoothValue{Value: 50, Min: 0, Max: 100, Step: 1}
+		temp  = SmoothValue{Value: 85, Min: 70, Max: 120, Step: 1}
+	)
 
+	speed.Update()
+	rpm.Update()
+	fuel.Update()
+	temp.Update()
+
+	speedInfo.SetValue(fmt.Sprintf("%d km/h", speed.Value))
+	rpmInfo.SetValue(fmt.Sprintf("%d RPM", rpm.Value))
+	fuelInfo.SetValue(fmt.Sprintf("%d%%", fuel.Value))
+	tempInfo.SetValue(fmt.Sprintf("%d°C", temp.Value))
+}
+
+func (s *SmoothValue) Update() {
+	delta := rand.Intn(s.Step*2+1) - s.Step // -step .. +step
+	s.Value += delta
+
+	if s.Value < s.Min {
+		s.Value = s.Min
+	}
+	if s.Value > s.Max {
+		s.Value = s.Max
+	}
 }

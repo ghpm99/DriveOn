@@ -18,7 +18,7 @@ type Renderer struct {
 	backgroundTexture *sdl.Texture
 	scene             int
 	width, height     int32
-	Infos             []Info
+	Infos             []*Info
 }
 
 func New(width, height int32) (*Renderer, error) {
@@ -136,6 +136,6 @@ func itoa(v int) string {
 	return fmt.Sprintf("%d", v)
 }
 
-func (r *Renderer) SetInfos(infos []Info) {
+func (r *Renderer) SetInfos(infos []*Info) {
 	r.Infos = infos
 }
