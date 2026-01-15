@@ -1,111 +1,90 @@
 package com.example.driveondisplay
 
 import android.content.Context
-import android.graphics.*
-import android.view.MotionEvent
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.view.View
 import kotlin.math.min
 
 class GForceView(
     context: Context,
     private val state: GForceState
-) : View(context) {
+) : View(context), Runnable {
 
-    // Paleta Audi RS
-    private val bgColor = Color.rgb(10, 10, 10)
-    private val gridColor = Color.argb(80, 255, 255, 255)
-    private val rsRed = Color.rgb(220, 20, 20)
-    private val G_LIMIT = 1.2f
+    private var running = false
+    private var lastFpsTime = 0L
+    private var frameCount = 0
+    private var fps = 0
 
-    private val paintGrid = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val frameDelay = 16L // ~60 FPS
+
+    private val bgPaint = Paint().apply { color = Color.rgb(10, 10, 10) }
+
+    private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 3f
-        color = gridColor
+        color = Color.argb(80, 255, 255, 255)
     }
 
-    private val paintTrail = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 5f
-        color = rsRed
-    }
-
-    private val paintDot = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = rsRed
+        color = Color.rgb(220, 20, 20)
     }
 
-    private val paintMax = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        color = Color.WHITE
-        textSize = 36f
+    fun start() {
+        running = true
+        post(this)
+    }
+
+    fun stop() {
+        running = false
+    }
+
+    override fun run() {
+        if (!running) return
+        invalidate()
+        postDelayed(this, frameDelay)
     }
 
     override fun onDraw(canvas: Canvas) {
-        canvas.drawColor(bgColor)
+        val now = System.currentTimeMillis()
+        frameCount++
+
+        if (now - lastFpsTime >= 1000) {
+            fps = frameCount
+            frameCount = 0
+            lastFpsTime = now
+        }
+
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
 
         val cx = width * 0.5f
         val cy = height * 0.5f
         val radius = min(cx, cy) * 0.42f
 
-        drawGrid(canvas, cx, cy, radius)
-        drawTrail(canvas, cx, cy, radius)
-        drawCurrentPoint(canvas, cx, cy, radius)
-//        drawMaxIndicators(canvas, cx, cy, radius)
+        canvas.drawCircle(cx, cy, radius, gridPaint)
+        canvas.drawLine(cx - radius, cy, cx + radius, cy, gridPaint)
+        canvas.drawLine(cx, cy - radius, cx, cy + radius, gridPaint)
 
-        invalidate() // loop contínuo
+        val px = cx + state.gx * radius
+        val py = cy - state.gy * radius
+
+        canvas.drawCircle(px, py, 14f, dotPaint)
+        drawFPS(canvas)
+
+        postInvalidateOnAnimation()
     }
 
-    private fun drawGrid(c: Canvas, cx: Float, cy: Float, r: Float) {
-        c.drawCircle(cx, cy, r, paintGrid)
-        c.drawCircle(cx, cy, r * 0.5f, paintGrid)
-        c.drawLine(cx - r, cy, cx + r, cy, paintGrid)
-        c.drawLine(cx, cy - r, cx, cy + r, paintGrid)
-    }
-
-    private fun drawTrail(c: Canvas, cx: Float, cy: Float, r: Float) {
-        val scale = r / 1.5f
-        val size = state.trailX.size
-
-        var lastX = 0f
-        var lastY = 0f
-        var first = true
-
-        for (i in 0 until size) {
-            val idx = (state.trailIndex + i) % size
-            val x = cx + state.trailX[idx] * scale
-            val y = cy - state.trailY[idx] * scale
-
-            if (!first) {
-                c.drawLine(lastX, lastY, x, y, paintTrail)
+    private fun drawFPS(c: Canvas) {
+        c.drawText(
+            "FPS: $fps",
+            30f,
+            50f,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.GREEN
+                textSize = 36f
             }
-            first = false
-            lastX = x
-            lastY = y
-        }
+        )
     }
-
-    private fun drawCurrentPoint(c: Canvas, cx: Float, cy: Float, r: Float) {
-        val scale = r * 0.7f
-        val x = cx + (state.gx / G_LIMIT) * scale
-        val y = cy - (state.gy / G_LIMIT) * scale
-        c.drawCircle(x, y, 12f, paintDot)
-    }
-
-    private fun drawMaxIndicators(c: Canvas, cx: Float, cy: Float, r: Float) {
-        c.drawText("↑ %.2fG".format(state.maxPosY), cx - 50, cy - r - 20, paintMax)
-        c.drawText("↓ %.2fG".format(state.maxNegY), cx - 50, cy + r + 40, paintMax)
-        c.drawText("← %.2fG".format(state.maxNegX), cx - r - 140, cy + 10, paintMax)
-        c.drawText("→ %.2fG".format(state.maxPosX), cx + r + 20, cy + 10, paintMax)
-    }
-
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        val x = event.x
-        val y = event.y
-        val action = event.actionMasked
-
-        NetworkClient.sendTouch(x, y, action)
-
-        return true
-    }
-
 }
