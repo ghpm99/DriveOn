@@ -2,6 +2,7 @@ package com.example.driveondisplay
 
 import android.content.Context
 import android.graphics.*
+import android.view.MotionEvent
 import android.view.View
 import kotlin.math.min
 
@@ -49,7 +50,7 @@ class GForceView(
         drawGrid(canvas, cx, cy, radius)
         drawTrail(canvas, cx, cy, radius)
         drawCurrentPoint(canvas, cx, cy, radius)
-        drawMaxIndicators(canvas, cx, cy, radius)
+//        drawMaxIndicators(canvas, cx, cy, radius)
 
         invalidate() // loop contínuo
     }
@@ -96,4 +97,15 @@ class GForceView(
         c.drawText("← %.2fG".format(state.maxNegX), cx - r - 140, cy + 10, paintMax)
         c.drawText("→ %.2fG".format(state.maxPosX), cx + r + 20, cy + 10, paintMax)
     }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        val x = event.x
+        val y = event.y
+        val action = event.actionMasked
+
+        NetworkClient.sendTouch(x, y, action)
+
+        return true
+    }
+
 }

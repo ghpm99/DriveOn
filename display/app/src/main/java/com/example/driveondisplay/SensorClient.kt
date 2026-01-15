@@ -42,21 +42,23 @@ class SensorClient(
         val linX = (event.values[0] - gravity[0]) / SensorManager.GRAVITY_EARTH
         val linY = (event.values[1] - gravity[1]) / SensorManager.GRAVITY_EARTH
 
-        state.gx = linX
-        state.gy = linY
+//        state.gx = linX
+//        state.gy = linY
+
+        NetworkClient.sendAccelerometer(linX, linY)
 
         // Máximos por direção
-        if (linX > 0) state.maxPosX = max(state.maxPosX, linX)
-        else state.maxNegX = max(state.maxNegX, abs(linX))
-
-        if (linY > 0) state.maxPosY = max(state.maxPosY, linY)
-        else state.maxNegY = max(state.maxNegY, abs(linY))
-
-        // Atualiza rastro
-        val i = state.trailIndex
-        state.trailX[i] = linX
-        state.trailY[i] = linY
-        state.trailIndex = (i + 1) % state.trailX.size
+//        if (linX > 0) state.maxPosX = max(state.maxPosX, linX)
+//        else state.maxNegX = max(state.maxNegX, abs(linX))
+//
+//        if (linY > 0) state.maxPosY = max(state.maxPosY, linY)
+//        else state.maxNegY = max(state.maxNegY, abs(linY))
+//
+//        // Atualiza rastro
+//        val i = state.trailIndex
+//        state.trailX[i] = linX
+//        state.trailY[i] = linY
+//        state.trailIndex = (i + 1) % state.trailX.size
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}

@@ -11,10 +11,12 @@ class MainActivity : Activity() {
     private lateinit var sensors: SensorClient
     private lateinit var view: GForceView
     private val state = GForceState()
+    private val server = NetworkClient
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        server.connectAsync()
         val metrics = resources.displayMetrics
         val width = metrics.widthPixels
         val height = metrics.heightPixels
