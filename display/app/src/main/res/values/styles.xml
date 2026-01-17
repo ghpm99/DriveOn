@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="@android:style/Theme.Black.NoTitleBar.Fullscreen">
-    </style>
-</resources>
 
+    <style name="AppTheme" parent="@android:style/Theme.NoTitleBar.Fullscreen">
+        <!-- SEM NADA AQUI -->
+    </style>
+
+</resources>

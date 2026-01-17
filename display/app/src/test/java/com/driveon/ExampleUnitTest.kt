@@ -1,4 +1,4 @@
-package com.example.driveondisplay
+package com.driveon
 
 import org.junit.Test
 
