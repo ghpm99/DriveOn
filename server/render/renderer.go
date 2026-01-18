@@ -1,8 +1,12 @@
 package render
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"time"
+	"unsafe"
 
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
@@ -97,6 +101,31 @@ func (r *Renderer) Draw() error {
 
 	r.renderer.Present()
 	return nil
+}
+
+func (r *Renderer) ReadScreen() ([]byte, error) {
+	w, h, _ := r.renderer.GetOutputSize()
+	pixels := make([]byte, w*h*4)
+
+	err := r.renderer.ReadPixels(
+		nil,
+		sdl.PIXELFORMAT_RGBA8888,
+		unsafe.Pointer(&pixels[0]),
+		int(w)*4,
+	)
+
+	if err != nil {
+		return []byte{}, err
+	}
+
+	img := image.NewRGBA(image.Rect(0, 0, int(w), int(h)))
+	copy(img.Pix, pixels)
+	var buf bytes.Buffer
+	jpeg.Encode(&buf, img, &jpeg.Options{Quality: 65})
+
+	data := buf.Bytes()
+
+	return data, nil
 }
 
 func (r *Renderer) updateFPS() {
