@@ -1,13 +1,17 @@
 package com.driveon;
 
+import android.content.Context;
 import android.util.Log;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorManager;
 import android.hardware.SensorEventListener;
 
+import java.util.List;
+
 public class SensorListener implements SensorEventListener {
 
+    private Context context;
     private SensorDTO sensorDTO;
     private final SensorManager sensorManager;
     private final Sensor accel;
@@ -20,7 +24,8 @@ public class SensorListener implements SensorEventListener {
     // Filtro
 
 
-    public SensorListener(SensorDTO sensorDTO) {
+    public SensorListener(Context context, SensorDTO sensorDTO) {
+        this.context = context;
         this.sensorDTO = sensorDTO;
         listSensors();
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
@@ -30,7 +35,7 @@ public class SensorListener implements SensorEventListener {
 
 
     private void listSensors() {
-        SensorManager sm = (SensorManager) getSystemService(SENSOR_SERVICE);
+        SensorManager sm = (SensorManager) context.getSystemService(context.SENSOR_SERVICE);
         List<Sensor> sensors = sm.getSensorList(Sensor.TYPE_ALL);
 
         for (Sensor s : sensors) {

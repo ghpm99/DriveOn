@@ -20,7 +20,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         sensorDTO = new SensorDTO();
-        sensorListener = new SensorListener(sensorDTO);
+        sensorListener = new SensorListener(this,sensorDTO);
         network = new Network(sensorDTO);
         view = new GForceView(this, sensorDTO);
         view.setOnTouchEventListener(network);
@@ -37,14 +37,13 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        view.start();
-        sensorListener.start()
+
+        sensorListener.start();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        view.stop();
         sensorListener.stop();
     }
 }

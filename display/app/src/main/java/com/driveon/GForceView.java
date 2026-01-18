@@ -5,10 +5,12 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 
+import android.view.MotionEvent;
 import android.view.View;
 
 public class GForceView extends View {
 
+    private OnTouchEventListener touchListener;
     private final SensorDTO sensorDTO;
     // Paints
     private final Paint gridPaint = new Paint(Paint.ANTI_ALIAS_FLAG);

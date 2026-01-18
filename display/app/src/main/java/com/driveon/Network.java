@@ -1,9 +1,18 @@
 package com.driveon;
 
-public class Network implements OnTouchEventListener{
+import android.util.Log;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketAddress;
+
+public class Network implements OnTouchEventListener {
+
+    private final String serverAddress = "192.168.18.7";
     private SensorDTO sensorDTO;
-    private string serverAddress = "192.168.18.7"
     private int serverPort = 9000;
     private Socket socket;
 
@@ -19,7 +28,7 @@ public class Network implements OnTouchEventListener{
         return socket;
     }
 
-    public void connect(){
+    public void connect() {
         socket = new Socket();
         SocketAddress socketAddress = new InetSocketAddress(serverAddress, serverPort);
         try {
@@ -30,7 +39,7 @@ public class Network implements OnTouchEventListener{
         }
     }
 
-    public void disconnect(){
+    public void disconnect() {
         try {
             getSocket().close();
             Log.d("Network", "Disconnected from server.");
@@ -40,17 +49,12 @@ public class Network implements OnTouchEventListener{
         }
     }
 
-    public void sendSensorData(){
-
-
-            string dataMsg = "{Type: 'SENSOR', AccelX: " + sensorDTO.getGx() + ", AccelY: " + sensorDTO.getGy() +  "}";
-            sendString(dataMsg)
-
-
-
+    public void sendSensorData() {
+        String dataMsg = "{Type: 'SENSOR', AccelX: " + sensorDTO.getGx() + ", AccelY: " + sensorDTO.getGy() + "}";
+        sendString(dataMsg);
     }
 
-    private void sendString(string message){
+    private void sendString(String message) {
         try {
             OutputStream outputStream = getSocket().getOutputStream();
             DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
@@ -63,7 +67,7 @@ public class Network implements OnTouchEventListener{
         }
     }
 
-    public void onTouch(float x, float y, int action){
+    public void onTouch(float x, float y, int action) {
         String msg = "TOUCH " + x + " " + y + " " + action;
         sendString(msg);
     }
