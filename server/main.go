@@ -102,7 +102,15 @@ func (driveON *DriveOn) mainLoop() {
 			log.Println(err)
 		}
 
-		time.Sleep(time.Millisecond * 16) // ~60 FPS
+		screen, err := driveON.render.ReadScreen()
+
+		if err != nil {
+			log.Println("Erro ao capturar tela:", err)
+		}
+
+		net.SendFrameToDisplay(screen)
+
+		time.Sleep(time.Millisecond * 33) // ~60 FPS
 	}
 }
 

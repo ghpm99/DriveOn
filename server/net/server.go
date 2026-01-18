@@ -5,11 +5,21 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sync/atomic"
 )
 
 type Server struct {
 	listener *net.Listener
+	client   *Client
 }
+
+type Client struct {
+	conn        net.Conn
+	sendChannel chan []byte
+	alive       atomic.Bool
+}
+
+var currentClient atomic.Pointer[Client]
 
 func Start() error {
 	// TODO:
@@ -32,23 +42,62 @@ func Start() error {
 		}
 
 		fmt.Println("Tablet conectado:", conn.RemoteAddr())
-		go handleClient(conn)
+		client := &Client{
+			conn:        conn,
+			sendChannel: make(chan []byte, 4),
+		}
+
+		client.alive.Store(true)
+
+		currentClient.Store(client)
+
+		go handleRead(client)
+		go handleWrite(client)
 	}
 
 }
 
-func handleClient(conn net.Conn) {
-	defer conn.Close()
+func handleRead(c *Client) {
+	defer c.conn.Close()
 
-	reader := bufio.NewReader(conn)
+	reader := bufio.NewReader(c.conn)
 
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Println("Cliente desconectou")
+			log.Println("Cliente desconectou (read)")
+			c.alive.Store(false)
 			return
 		}
 
-		fmt.Print("Recebido: ", line)
+		log.Print("Recebido: ", line)
+		// TODO: parse TOUCH, comandos, etc
+	}
+}
+
+func handleWrite(c *Client) {
+	defer c.conn.Close()
+
+	for frame := range c.sendChannel {
+		_, err := c.conn.Write(frame)
+		if err != nil {
+			log.Println("Erro enviando frame:", err)
+			c.alive.Store(false)
+			return
+		}
+	}
+}
+
+func (c *Client) sendFrame(frame []byte) {
+	select {
+	case c.sendChannel <- frame:
+	default:
+	}
+}
+
+func SendFrameToDisplay(frame []byte) {
+	client := currentClient.Load()
+	if client != nil && client.alive.Load() {
+		client.sendFrame(frame)
 	}
 }
