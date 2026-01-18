@@ -1,0 +1,70 @@
+package com.driveon;
+
+public class Network implements OnTouchEventListener{
+
+    private SensorDTO sensorDTO;
+    private string serverAddress = "192.168.18.7"
+    private int serverPort = 9000;
+    private Socket socket;
+
+
+    public Network(SensorDTO sensorDTO) {
+        this.sensorDTO = sensorDTO;
+    }
+
+    private Socket getSocket() {
+        if (socket == null || socket.isClosed()) {
+            connect();
+        }
+        return socket;
+    }
+
+    public void connect(){
+        socket = new Socket();
+        SocketAddress socketAddress = new InetSocketAddress(serverAddress, serverPort);
+        try {
+            socket.connect(socketAddress, 5000); // 5 seconds timeout
+            Log.d("Network", "Connected to server: " + serverAddress + ":" + serverPort);
+        } catch (IOException e) {
+            Log.e("Network", "Connection failed: " + e.getMessage());
+        }
+    }
+
+    public void disconnect(){
+        try {
+            getSocket().close();
+            Log.d("Network", "Disconnected from server.");
+
+        } catch (IOException e) {
+            Log.e("Network", "Disconnection failed: " + e.getMessage());
+        }
+    }
+
+    public void sendSensorData(){
+
+
+            string dataMsg = "{Type: 'SENSOR', AccelX: " + sensorDTO.getGx() + ", AccelY: " + sensorDTO.getGy() +  "}";
+            sendString(dataMsg)
+
+
+
+    }
+
+    private void sendString(string message){
+        try {
+            OutputStream outputStream = getSocket().getOutputStream();
+            DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
+
+            dataOutputStream.writeUTF(message);
+            dataOutputStream.flush();
+            Log.d("Network", "Message sent: " + message);
+        } catch (IOException e) {
+            Log.e("Network", "Failed to send message: " + e.getMessage());
+        }
+    }
+
+    public void onTouch(float x, float y, int action){
+        String msg = "TOUCH " + x + " " + y + " " + action;
+        sendString(msg);
+    }
+}
