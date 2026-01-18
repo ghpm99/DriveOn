@@ -29,14 +29,19 @@ public class Network implements OnTouchEventListener {
     }
 
     public void connect() {
-        socket = new Socket();
-        SocketAddress socketAddress = new InetSocketAddress(serverAddress, serverPort);
-        try {
-            socket.connect(socketAddress, 5000); // 5 seconds timeout
-            Log.d("Network", "Connected to server: " + serverAddress + ":" + serverPort);
-        } catch (IOException e) {
-            Log.e("Network", "Connection failed: " + e.getMessage());
-        }
+        new Thread(() -> {
+
+
+            Log.d("Network", "Tentando conectar");
+            socket = new Socket();
+            SocketAddress socketAddress = new InetSocketAddress(serverAddress, serverPort);
+            try {
+                socket.connect(socketAddress, 5000); // 5 seconds timeout
+                Log.d("Network", "Connected to server: " + serverAddress + ":" + serverPort);
+            } catch (IOException e) {
+                Log.e("Network", "Connection failed: " + e.getMessage());
+            }
+        }).start();
     }
 
     public void disconnect() {
@@ -59,7 +64,7 @@ public class Network implements OnTouchEventListener {
             OutputStream outputStream = getSocket().getOutputStream();
             DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
 
-            dataOutputStream.writeUTF(message);
+            dataOutputStream.write((message + "\n").getBytes("UTF-8"));
             dataOutputStream.flush();
             Log.d("Network", "Message sent: " + message);
         } catch (IOException e) {

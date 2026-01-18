@@ -55,8 +55,10 @@ public class GForceView extends View {
         canvas.drawText(String.format("GX: %.2f", this.sensorDTO.getGx()), 20, 40, textPaint);
         canvas.drawText(String.format("GY: %.2f", this.sensorDTO.getGy()), 20, 80, textPaint);
 
+        canvas.drawText("teste", 20, 120, textPaint);
+
         // Loop de render (controlado)
-        postInvalidateOnAnimation();
+        postInvalidateDelayed(16);
     }
 
     public void setOnTouchEventListener(OnTouchEventListener listener) {
