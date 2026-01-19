@@ -2,6 +2,7 @@ package com.driveon;
 
 import android.util.Log;
 
+import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -30,8 +31,6 @@ public class Network implements OnTouchEventListener {
 
     public void connect() {
         new Thread(() -> {
-
-
             Log.d("Network", "Tentando conectar");
             socket = new Socket();
             SocketAddress socketAddress = new InetSocketAddress(serverAddress, serverPort);
@@ -78,13 +77,18 @@ public class Network implements OnTouchEventListener {
     }
 
     public byte[] receiveFrame() {
-        DataInputStream in = new DataInputStream(socket.getInputStream());
-        int frameSize = in.readInt();
-        if (frameSize <= 0 || frameSize > 5_000_000) {
+        try {
+            DataInputStream in = new DataInputStream(socket.getInputStream());
+            int frameSize = in.readInt();
+            if (frameSize <= 0 || frameSize > 5_000_000) {
+                return null;
+            }
+            byte[] jpeg = new byte[frameSize];
+            in.readFully(jpeg);
+            return jpeg;
+        }catch (IOException e){
+            Log.d("Network", e.getMessage());
             return null;
         }
-        byte[] jpeg = new byte[frameSize];
-        in.readFully(jpeg);
-        return jpeg;
     }
 }

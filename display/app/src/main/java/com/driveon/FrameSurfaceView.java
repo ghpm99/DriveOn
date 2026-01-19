@@ -5,6 +5,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.util.AttributeSet;
+import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
@@ -15,8 +16,19 @@ public class FrameSurfaceView extends SurfaceView implements SurfaceHolder.Callb
     private SurfaceHolder holder;
     private Bitmap bitmap;
 
+    public FrameSurfaceView(Context context,OnTouchEventListener listener,SensorDTO sensorDTO) {
+        super(context);
+        init();
+        this.touchListener = listener;
+        this.sensorDTO = sensorDTO;
+    }
+
     public FrameSurfaceView(Context context, AttributeSet attrs) {
         super(context, attrs);
+        init();
+    }
+
+    private void init(){
         holder = getHolder();
         holder.addCallback(this);
     }

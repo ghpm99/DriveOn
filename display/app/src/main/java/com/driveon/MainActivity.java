@@ -14,6 +14,7 @@ public class MainActivity extends Activity {
     private SensorListener sensorListener;
     private SensorDTO sensorDTO;
     private Network network;
+    private FrameClient frameClient;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -23,13 +24,19 @@ public class MainActivity extends Activity {
         sensorListener = new SensorListener(this,sensorDTO);
         network = new Network(sensorDTO);
 
-        setContentView(R.layout.activity_main);
 
-        view = findViewById(R.id.frameView);
-        view.setSensorDTO(sensorDTO);
-        view.setOnTouchEventListener(network);
+
+
+        view = new FrameSurfaceView(this, network, sensorDTO);
+        setContentView(view);
+
+        frameClient = new FrameClient(network, view);
 
         network.connect();
+
+        new Thread(
+                frameClient
+        ).start();
 
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
