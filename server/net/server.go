@@ -2,6 +2,8 @@ package net
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"log"
 	"net"
@@ -89,8 +91,13 @@ func handleWrite(c *Client) {
 }
 
 func (c *Client) sendFrame(frame []byte) {
+	var buf bytes.Buffer
+
+	binary.Write(&buf, binary.BigEndian, uint32(len(frame)))
+	buf.Write(frame)
+
 	select {
-	case c.sendChannel <- frame:
+	case c.sendChannel <- buf.Bytes():
 	default:
 	}
 }

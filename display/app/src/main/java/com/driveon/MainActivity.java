@@ -10,7 +10,7 @@ import java.util.List;
 
 public class MainActivity extends Activity {
 
-    private GForceView view;
+    private FrameSurfaceView view;
     private SensorListener sensorListener;
     private SensorDTO sensorDTO;
     private Network network;
@@ -22,12 +22,15 @@ public class MainActivity extends Activity {
         sensorDTO = new SensorDTO();
         sensorListener = new SensorListener(this,sensorDTO);
         network = new Network(sensorDTO);
-        view = new GForceView(this, sensorDTO);
+
+        setContentView(R.layout.activity_main);
+
+        view = findViewById(R.id.frameView);
+        view.setSensorDTO(sensorDTO);
         view.setOnTouchEventListener(network);
 
         network.connect();
 
-        setContentView(view);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }

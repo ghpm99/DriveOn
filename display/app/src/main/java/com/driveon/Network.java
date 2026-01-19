@@ -76,4 +76,15 @@ public class Network implements OnTouchEventListener {
         String msg = "TOUCH " + x + " " + y + " " + action;
         sendString(msg);
     }
+
+    public byte[] receiveFrame() {
+        DataInputStream in = new DataInputStream(socket.getInputStream());
+        int frameSize = in.readInt();
+        if (frameSize <= 0 || frameSize > 5_000_000) {
+            return null;
+        }
+        byte[] jpeg = new byte[frameSize];
+        in.readFully(jpeg);
+        return jpeg;
+    }
 }
