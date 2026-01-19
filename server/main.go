@@ -110,7 +110,7 @@ func (driveON *DriveOn) mainLoop() {
 
 		net.SendFrameToDisplay(screen)
 
-		time.Sleep(time.Millisecond * 33) // ~60 FPS
+		time.Sleep(time.Millisecond * 2) // ~60 FPS
 	}
 }
 

@@ -105,13 +105,13 @@ func (r *Renderer) Draw() error {
 
 func (r *Renderer) ReadScreen() ([]byte, error) {
 	w, h, _ := r.renderer.GetOutputSize()
-	pixels := make([]byte, w*h*4)
+	pixels := make([]byte, w*h*3)
 
 	err := r.renderer.ReadPixels(
 		nil,
-		sdl.PIXELFORMAT_RGBA8888,
+		sdl.PIXELFORMAT_RGB24,
 		unsafe.Pointer(&pixels[0]),
-		int(w)*4,
+		int(w)*3,
 	)
 
 	if err != nil {
@@ -119,7 +119,15 @@ func (r *Renderer) ReadScreen() ([]byte, error) {
 	}
 
 	img := image.NewRGBA(image.Rect(0, 0, int(w), int(h)))
-	copy(img.Pix, pixels)
+	pi := 0
+	for i := 0; i < len(img.Pix); i += 4 {
+		img.Pix[i+0] = pixels[pi+0] // R
+		img.Pix[i+1] = pixels[pi+1] // G
+		img.Pix[i+2] = pixels[pi+2] // B
+		img.Pix[i+3] = 255
+		pi += 3
+	}
+
 	var buf bytes.Buffer
 	jpeg.Encode(&buf, img, &jpeg.Options{Quality: 65})
 
