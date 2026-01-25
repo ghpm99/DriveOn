@@ -5,8 +5,6 @@ import (
 	"log"
 	"math/rand"
 
-	"time"
-
 	"driveon/net"
 	"driveon/render"
 
@@ -109,8 +107,6 @@ func (driveON *DriveOn) mainLoop() {
 		}
 
 		net.SendFrameToDisplay(screen)
-
-		time.Sleep(time.Millisecond * 2) // ~60 FPS
 	}
 }
 

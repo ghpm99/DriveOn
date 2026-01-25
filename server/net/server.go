@@ -19,6 +19,7 @@ type Client struct {
 	conn        net.Conn
 	sendChannel chan []byte
 	alive       atomic.Bool
+	ackChan     chan struct{}
 }
 
 var currentClient atomic.Pointer[Client]
@@ -73,6 +74,13 @@ func handleRead(c *Client) {
 		}
 
 		log.Print("Recebido: ", line)
+		if line == "ACK\n" {
+			select {
+			case c.ackChan <- struct{}{}:
+			default:
+
+			}
+		}
 		// TODO: parse TOUCH, comandos, etc
 	}
 }
@@ -100,6 +108,8 @@ func (c *Client) sendFrame(frame []byte) {
 	case c.sendChannel <- buf.Bytes():
 	default:
 	}
+
+	<-c.ackChan
 }
 
 func SendFrameToDisplay(frame []byte) {
