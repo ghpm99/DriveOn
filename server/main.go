@@ -100,13 +100,14 @@ func (driveON *DriveOn) mainLoop() {
 			log.Println(err)
 		}
 
-		screen, err := driveON.render.ReadScreen()
+		log.Println("Lendo frame")
+		frame, err := driveON.render.ReadScreen()
 
 		if err != nil {
 			log.Println("Erro ao capturar tela:", err)
 		}
-
-		net.SendFrameToDisplay(screen)
+		log.Println("Enviando frame")
+		net.SendFrameToDisplay(frame)
 	}
 }
 

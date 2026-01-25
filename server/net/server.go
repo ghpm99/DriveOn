@@ -3,6 +3,7 @@ package net
 import (
 	"bufio"
 	"bytes"
+	"driveon/render"
 	"encoding/binary"
 	"fmt"
 	"log"
@@ -20,6 +21,7 @@ type Client struct {
 	sendChannel chan []byte
 	alive       atomic.Bool
 	ackChan     chan struct{}
+	frameBuffer chan render.Frame
 }
 
 var currentClient atomic.Pointer[Client]
@@ -48,6 +50,8 @@ func Start() error {
 		client := &Client{
 			conn:        conn,
 			sendChannel: make(chan []byte, 4),
+			ackChan:     make(chan struct{}, 1),
+			frameBuffer: make(chan render.Frame, 2),
 		}
 
 		client.alive.Store(true)
@@ -75,6 +79,7 @@ func handleRead(c *Client) {
 
 		log.Print("Recebido: ", line)
 		if line == "ACK\n" {
+			log.Println("postando no channel")
 			select {
 			case c.ackChan <- struct{}{}:
 			default:
@@ -98,21 +103,29 @@ func handleWrite(c *Client) {
 	}
 }
 
-func (c *Client) sendFrame(frame []byte) {
-	var buf bytes.Buffer
+func (c *Client) sendFrame(frame render.Frame) {
 
-	binary.Write(&buf, binary.BigEndian, uint32(len(frame)))
-	buf.Write(frame)
+	var buf bytes.Buffer
+	log.Println("Tamanho msg:", frame.FrameSize+12)
+
+	log.Println("Escrevendo width")
+	binary.Write(&buf, binary.BigEndian, frame.Width)
+	log.Println("Escrevendo height")
+	binary.Write(&buf, binary.BigEndian, frame.Height)
+	log.Println("Escrevendo frameSize")
+	binary.Write(&buf, binary.BigEndian, frame.FrameSize)
+	log.Println("Escrevendo data")
+	buf.Write(frame.Data)
 
 	select {
 	case c.sendChannel <- buf.Bytes():
 	default:
 	}
-
+	log.Println("Aguardando ACK")
 	<-c.ackChan
 }
 
-func SendFrameToDisplay(frame []byte) {
+func SendFrameToDisplay(frame render.Frame) {
 	client := currentClient.Load()
 	if client != nil && client.alive.Load() {
 		client.sendFrame(frame)

@@ -1,10 +1,7 @@
 package render
 
 import (
-	"bytes"
 	"fmt"
-	"image"
-	"image/jpeg"
 	"time"
 	"unsafe"
 
@@ -23,6 +20,11 @@ type Renderer struct {
 	scene             int
 	width, height     int32
 	Infos             []*Info
+}
+
+type Frame struct {
+	Width, Height, FrameSize int32
+	Data                     []byte
 }
 
 func New(width, height int32) (*Renderer, error) {
@@ -103,37 +105,27 @@ func (r *Renderer) Draw() error {
 	return nil
 }
 
-func (r *Renderer) ReadScreen() ([]byte, error) {
+func (r *Renderer) ReadScreen() (Frame, error) {
 	w, h, _ := r.renderer.GetOutputSize()
-	pixels := make([]byte, w*h*3)
+	pixels := make([]byte, w*h*2)
 
 	err := r.renderer.ReadPixels(
 		nil,
-		sdl.PIXELFORMAT_RGB24,
+		sdl.PIXELFORMAT_RGB565,
 		unsafe.Pointer(&pixels[0]),
-		int(w)*3,
+		int(w)*2,
 	)
 
 	if err != nil {
-		return []byte{}, err
+		return Frame{}, err
 	}
 
-	img := image.NewRGBA(image.Rect(0, 0, int(w), int(h)))
-	pi := 0
-	for i := 0; i < len(img.Pix); i += 4 {
-		img.Pix[i+0] = pixels[pi+0] // R
-		img.Pix[i+1] = pixels[pi+1] // G
-		img.Pix[i+2] = pixels[pi+2] // B
-		img.Pix[i+3] = 255
-		pi += 3
-	}
-
-	var buf bytes.Buffer
-	jpeg.Encode(&buf, img, &jpeg.Options{Quality: 65})
-
-	data := buf.Bytes()
-
-	return data, nil
+	return Frame{
+		Data:      pixels,
+		Width:     w,
+		Height:    h,
+		FrameSize: int32(len(pixels)),
+	}, nil
 }
 
 func (r *Renderer) updateFPS() {
