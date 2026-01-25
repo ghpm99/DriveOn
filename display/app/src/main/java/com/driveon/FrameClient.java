@@ -30,6 +30,7 @@ public class FrameClient implements Runnable {
                 if (bitmap != null) {
                     surfaceView.updateFrame(bitmap);
                 }
+
             }
         } catch (Exception e) {
             e.printStackTrace();

@@ -23,16 +23,12 @@ public class MainActivity extends Activity {
         sensorDTO = new SensorDTO();
         sensorListener = new SensorListener(this,sensorDTO);
         network = new Network(sensorDTO);
-
-
-
+        network.connect();
 
         view = new FrameSurfaceView(this, network, sensorDTO);
         setContentView(view);
 
         frameClient = new FrameClient(network, view);
-
-        network.connect();
 
         new Thread(
                 frameClient

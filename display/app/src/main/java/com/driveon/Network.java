@@ -9,6 +9,7 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
+import java.net.SocketException;
 
 public class Network implements OnTouchEventListener {
 
@@ -20,23 +21,25 @@ public class Network implements OnTouchEventListener {
 
     public Network(SensorDTO sensorDTO) {
         this.sensorDTO = sensorDTO;
+
     }
 
-    private Socket getSocket() {
-        if (socket == null || socket.isClosed()) {
-            connect();
+    private Socket getSocket() throws SocketException {
+        if (this.socket == null) {
+            throw new SocketException("Socket nao conectado");
         }
-        return socket;
+        return this.socket;
     }
 
     public void connect() {
         new Thread(() -> {
             Log.d("Network", "Tentando conectar");
-            socket = new Socket();
+            this.socket = new Socket();
             SocketAddress socketAddress = new InetSocketAddress(serverAddress, serverPort);
             try {
                 socket.connect(socketAddress, 5000); // 5 seconds timeout
                 Log.d("Network", "Connected to server: " + serverAddress + ":" + serverPort);
+                sendAck();
             } catch (IOException e) {
                 Log.e("Network", "Connection failed: " + e.getMessage());
             }
@@ -71,6 +74,10 @@ public class Network implements OnTouchEventListener {
         }
     }
 
+    public void sendAck(){
+        sendString("ACK");
+    }
+
     public void onTouch(float x, float y, int action) {
         String msg = "TOUCH " + x + " " + y + " " + action;
         sendString(msg);
@@ -78,13 +85,14 @@ public class Network implements OnTouchEventListener {
 
     public byte[] receiveFrame() {
         try {
-            DataInputStream in = new DataInputStream(socket.getInputStream());
+            DataInputStream in = new DataInputStream(getSocket().getInputStream());
             int frameSize = in.readInt();
             if (frameSize <= 0 || frameSize > 5_000_000) {
                 return null;
             }
             byte[] jpeg = new byte[frameSize];
             in.readFully(jpeg);
+            sendAck();
             return jpeg;
         }catch (IOException e){
             Log.d("Network", e.getMessage());
