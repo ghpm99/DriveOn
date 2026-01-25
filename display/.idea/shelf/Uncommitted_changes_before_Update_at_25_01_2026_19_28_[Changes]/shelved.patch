@@ -1,0 +1,216 @@
+Index: app/src/main/java/com/driveon/Network.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>package com.driveon;\r\n\r\nimport android.util.Log;\r\n\r\nimport java.io.DataInputStream;\r\nimport java.io.DataOutputStream;\r\nimport java.io.IOException;\r\nimport java.io.OutputStream;\r\nimport java.net.InetSocketAddress;\r\nimport java.net.Socket;\r\nimport java.net.SocketAddress;\r\nimport java.net.SocketException;\r\n\r\npublic class Network implements OnTouchEventListener {\r\n\r\n    private final String serverAddress = \"192.168.18.7\";\r\n    private SensorDTO sensorDTO;\r\n    private int serverPort = 9000;\r\n    private Socket socket;\r\n\r\n\r\n    public Network(SensorDTO sensorDTO) {\r\n        this.sensorDTO = sensorDTO;\r\n\r\n    }\r\n\r\n    private Socket getSocket() throws SocketException {\r\n        if (this.socket == null) {\r\n            throw new SocketException(\"Socket nao conectado\");\r\n        }\r\n        return this.socket;\r\n    }\r\n\r\n    public void connect() {\r\n        new Thread(() -> {\r\n            Log.d(\"Network\", \"Tentando conectar\");\r\n            this.socket = new Socket();\r\n            SocketAddress socketAddress = new InetSocketAddress(serverAddress, serverPort);\r\n            try {\r\n                socket.connect(socketAddress, 5000); // 5 seconds timeout\r\n                Log.d(\"Network\", \"Connected to server: \" + serverAddress + \":\" + serverPort);\r\n                sendAck();\r\n            } catch (IOException e) {\r\n                Log.e(\"Network\", \"Connection failed: \" + e.getMessage());\r\n            }\r\n        }).start();\r\n    }\r\n\r\n    public void disconnect() {\r\n        try {\r\n            getSocket().close();\r\n            Log.d(\"Network\", \"Disconnected from server.\");\r\n\r\n        } catch (IOException e) {\r\n            Log.e(\"Network\", \"Disconnection failed: \" + e.getMessage());\r\n        }\r\n    }\r\n\r\n    public void sendSensorData() {\r\n        String dataMsg = \"{Type: 'SENSOR', AccelX: \" + sensorDTO.getGx() + \", AccelY: \" + sensorDTO.getGy() + \"}\";\r\n        sendString(dataMsg);\r\n    }\r\n\r\n    private void sendString(String message) {\r\n        try {\r\n            OutputStream outputStream = getSocket().getOutputStream();\r\n            DataOutputStream dataOutputStream = new DataOutputStream(outputStream);\r\n\r\n            dataOutputStream.write((message + \"\\n\").getBytes(\"UTF-8\"));\r\n            dataOutputStream.flush();\r\n            Log.d(\"Network\", \"Message sent: \" + message);\r\n        } catch (IOException e) {\r\n            Log.e(\"Network\", \"Failed to send message: \" + e.getMessage());\r\n        }\r\n    }\r\n\r\n    public void sendAck(){\r\n        sendString(\"ACK\");\r\n    }\r\n\r\n    public void onTouch(float x, float y, int action) {\r\n        String msg = \"TOUCH \" + x + \" \" + y + \" \" + action;\r\n        sendString(msg);\r\n    }\r\n\r\n    public byte[] receiveFrame() {\r\n        try {\r\n            DataInputStream in = new DataInputStream(getSocket().getInputStream());\r\n            int frameSize = in.readInt();\r\n            if (frameSize <= 0 || frameSize > 5_000_000) {\r\n                return null;\r\n            }\r\n            byte[] jpeg = new byte[frameSize];\r\n            in.readFully(jpeg);\r\n            sendAck();\r\n            return jpeg;\r\n        }catch (IOException e){\r\n            Log.d(\"Network\", e.getMessage());\r\n            return null;\r\n        }\r\n    }\r\n}
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/java/com/driveon/Network.java b/app/src/main/java/com/driveon/Network.java
+--- a/app/src/main/java/com/driveon/Network.java	(revision 84190d3fe134ef819ab9e022c657c5dc43fdc0ed)
++++ b/app/src/main/java/com/driveon/Network.java	(date 1769374464513)
+@@ -25,13 +25,17 @@
+     }
+ 
+     private Socket getSocket() throws SocketException {
+-        if (this.socket == null) {
++        if (this.socket == null || !this.socket.isConnected()) {
+             throw new SocketException("Socket nao conectado");
+         }
+         return this.socket;
+     }
+ 
+-    public void connect() {
++    public synchronized void connect() {
++        if(this.socket != null && this.socket.isConnected()){
++            Log.d("Network", "Já conectado");
++            return;
++        }
+         new Thread(() -> {
+             Log.d("Network", "Tentando conectar");
+             this.socket = new Socket();
+@@ -83,17 +87,23 @@
+         sendString(msg);
+     }
+ 
+-    public byte[] receiveFrame() {
++    public FrameDTO receiveFrame() {
+         try {
++            FrameDTO frame = new FrameDTO();
+             DataInputStream in = new DataInputStream(getSocket().getInputStream());
+-            int frameSize = in.readInt();
+-            if (frameSize <= 0 || frameSize > 5_000_000) {
+-                return null;
+-            }
+-            byte[] jpeg = new byte[frameSize];
+-            in.readFully(jpeg);
+-            sendAck();
+-            return jpeg;
++            Log.d("Network", "Waiting for frame...");
++            Log.d("Network", "Recebendo width");
++            frame.setWidth(in.readInt());
++            Log.d("Network", "Recebendo height");
++            frame.setHeight(in.readInt());
++            Log.d("Network", "Recebendo frameSize");
++            frame.setFrameSize(in.readInt());
++            Log.d("Network", "Recebendo data");
++            byte[] data = new byte[frame.getFrameSize()];
++            in.readFully(data);
++            frame.setData(data);
++            Log.d("Network", "Frame received");
++            return frame;
+         }catch (IOException e){
+             Log.d("Network", e.getMessage());
+             return null;
+Index: app/src/main/java/com/driveon/FrameClient.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>package com.driveon;\r\n\r\nimport android.graphics.Bitmap;\r\nimport android.graphics.BitmapFactory;\r\n\r\npublic class FrameClient implements Runnable {\r\n\r\n    private final Network network;\r\n    private final FrameSurfaceView surfaceView;\r\n\r\n    public FrameClient(Network network, FrameSurfaceView view) {\r\n        this.network = network;\r\n        this.surfaceView = view;\r\n    }\r\n\r\n    @Override\r\n    public void run() {\r\n\r\n        try {\r\n            while (true) {\r\n                byte[] frame = network.receiveFrame();\r\n\r\n                if (frame == null) {\r\n                    continue;\r\n                }\r\n\r\n                // \uD83D\uDDBC\uFE0F Decodifica JPEG → Bitmap\r\n                Bitmap bitmap = BitmapFactory.decodeByteArray(frame, 0, frame.length);\r\n\r\n                if (bitmap != null) {\r\n                    surfaceView.updateFrame(bitmap);\r\n                }\r\n\r\n            }\r\n        } catch (Exception e) {\r\n            e.printStackTrace();\r\n        }\r\n\r\n    }\r\n}\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/java/com/driveon/FrameClient.java b/app/src/main/java/com/driveon/FrameClient.java
+--- a/app/src/main/java/com/driveon/FrameClient.java	(revision 84190d3fe134ef819ab9e022c657c5dc43fdc0ed)
++++ b/app/src/main/java/com/driveon/FrameClient.java	(date 1769374098556)
+@@ -2,6 +2,9 @@
+ 
+ import android.graphics.Bitmap;
+ import android.graphics.BitmapFactory;
++import android.util.Log;
++
++import java.nio.ByteBuffer;
+ 
+ public class FrameClient implements Runnable {
+ 
+@@ -18,18 +21,20 @@
+ 
+         try {
+             while (true) {
+-                byte[] frame = network.receiveFrame();
++                FrameDTO frame = network.receiveFrame();
++                network.sendAck();
+ 
+-                if (frame == null) {
++                if (!frame.isValid()) {
++                    Log.d("Network", "Invalid frame received");
+                     continue;
+                 }
+ 
+                 // 🖼️ Decodifica JPEG → Bitmap
+-                Bitmap bitmap = BitmapFactory.decodeByteArray(frame, 0, frame.length);
++                Bitmap bitmap = Bitmap.createBitmap(frame.getWidth(), frame.getHeight(), Bitmap.Config.RGB_565);
++                ByteBuffer buffer = ByteBuffer.wrap(frame.getData());
++                bitmap.copyPixelsFromBuffer(buffer);
+ 
+-                if (bitmap != null) {
+-                    surfaceView.updateFrame(bitmap);
+-                }
++                surfaceView.updateFrame(bitmap);
+ 
+             }
+         } catch (Exception e) {
+Index: app/src/main/java/com/driveon/MainActivity.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>package com.driveon;\r\n\r\nimport android.app.Activity;\r\n\r\nimport android.os.Bundle;\r\nimport android.util.Log;\r\nimport android.view.WindowManager;\r\n\r\nimport java.util.List;\r\n\r\npublic class MainActivity extends Activity {\r\n\r\n    private FrameSurfaceView view;\r\n    private SensorListener sensorListener;\r\n    private SensorDTO sensorDTO;\r\n    private Network network;\r\n    private FrameClient frameClient;\r\n\r\n    @Override\r\n    protected void onCreate(Bundle savedInstanceState) {\r\n        super.onCreate(savedInstanceState);\r\n\r\n        sensorDTO = new SensorDTO();\r\n        sensorListener = new SensorListener(this,sensorDTO);\r\n        network = new Network(sensorDTO);\r\n        network.connect();\r\n\r\n        view = new FrameSurfaceView(this, network, sensorDTO);\r\n        setContentView(view);\r\n\r\n        frameClient = new FrameClient(network, view);\r\n\r\n        new Thread(\r\n                frameClient\r\n        ).start();\r\n\r\n\r\n        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);\r\n    }\r\n\r\n\r\n\r\n    @Override\r\n    protected void onResume() {\r\n        super.onResume();\r\n\r\n        sensorListener.start();\r\n    }\r\n\r\n    @Override\r\n    protected void onPause() {\r\n        super.onPause();\r\n        sensorListener.stop();\r\n    }\r\n}\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/java/com/driveon/MainActivity.java b/app/src/main/java/com/driveon/MainActivity.java
+--- a/app/src/main/java/com/driveon/MainActivity.java	(revision 84190d3fe134ef819ab9e022c657c5dc43fdc0ed)
++++ b/app/src/main/java/com/driveon/MainActivity.java	(date 1769374150712)
+@@ -38,6 +38,11 @@
+         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+     }
+ 
++    @Override
++    protected void onDestroy(){
++        super.onDestroy();
++        network.disconnect();
++    }
+ 
+ 
+     @Override
+Index: app/src/main/java/com/driveon/FrameDTO.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/java/com/driveon/FrameDTO.java b/app/src/main/java/com/driveon/FrameDTO.java
+new file mode 100644
+--- /dev/null	(date 1769371588837)
++++ b/app/src/main/java/com/driveon/FrameDTO.java	(date 1769371588837)
+@@ -0,0 +1,45 @@
++package com.driveon;
++
++public class FrameDTO {
++
++    private int width;
++    private int height;
++    private int frameSize;
++    private byte[] data;
++
++    public int getWidth() {
++        return width;
++    }
++
++    public void setWidth(int width){
++        this.width = width;
++    }
++
++    public int getHeight(){
++        return  height;
++    }
++
++    public void setHeight(int height){
++        this.height = height;
++    }
++    public int getFrameSize(){
++        return frameSize;
++    }
++    public void setFrameSize(int frameSize){
++        this.frameSize = frameSize;
++    }
++
++    public byte[] getData(){
++        return data;
++    }
++
++    public void setData(byte[] data){
++        this.data = data;
++    }
++
++    public boolean isValid(){
++        return data.length == frameSize && width > 0 && height > 0;
++    }
++
++
++}
+Index: app/src/main/AndroidManifest.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"\r\n    xmlns:tools=\"http://schemas.android.com/tools\">\r\n    <uses-permission android:name=\"android.permission.INTERNET\" />\r\n    <uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\" />\r\n    <application\r\n        android:allowBackup=\"false\"\r\n        android:icon=\"@mipmap/ic_launcher\"\r\n        android:label=\"@string/app_name\"\r\n        android:roundIcon=\"@mipmap/ic_launcher_round\"\r\n        android:supportsRtl=\"true\"\r\n        android:theme=\"@style/AppTheme\">\r\n        <activity\r\n            android:name=\".MainActivity\"\r\n            android:configChanges=\"orientation|screenSize\"\r\n            android:exported=\"true\"\r\n            android:hardwareAccelerated=\"true\"\r\n            android:label=\"@string/app_name\"\r\n            android:screenOrientation=\"landscape\"\r\n            android:theme=\"@style/AppTheme\">\r\n            <intent-filter>\r\n                <action android:name=\"android.intent.action.MAIN\" />\r\n                <category android:name=\"android.intent.category.LAUNCHER\" />\r\n            </intent-filter>\r\n        </activity>\r\n    </application>\r\n\r\n</manifest>
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+--- a/app/src/main/AndroidManifest.xml	(revision 84190d3fe134ef819ab9e022c657c5dc43fdc0ed)
++++ b/app/src/main/AndroidManifest.xml	(date 1769308342100)
+@@ -12,7 +12,7 @@
+         android:theme="@style/AppTheme">
+         <activity
+             android:name=".MainActivity"
+-            android:configChanges="orientation|screenSize"
++            android:configChanges="orientation|screenSize|keyboardHidden"
+             android:exported="true"
+             android:hardwareAccelerated="true"
+             android:label="@string/app_name"
+@@ -20,7 +20,8 @@
+             android:theme="@style/AppTheme">
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN" />
+-                <category android:name="android.intent.category.LAUNCHER" />
++                <category android:name="android.intent.category.HOME" />
++                <category android:name="android.intent.category.DEFAULT" />
+             </intent-filter>
+         </activity>
+     </application>

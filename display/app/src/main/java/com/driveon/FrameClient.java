@@ -2,6 +2,9 @@ package com.driveon;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.util.Log;
+
+import java.nio.ByteBuffer;
 
 public class FrameClient implements Runnable {
 
@@ -18,18 +21,20 @@ public class FrameClient implements Runnable {
 
         try {
             while (true) {
-                byte[] frame = network.receiveFrame();
+                FrameDTO frame = network.receiveFrame();
+                network.sendAck();
 
-                if (frame == null) {
+                if (!frame.isValid()) {
+                    Log.d("Network", "Invalid frame received");
                     continue;
                 }
 
                 // 🖼️ Decodifica JPEG → Bitmap
-                Bitmap bitmap = BitmapFactory.decodeByteArray(frame, 0, frame.length);
+                Bitmap bitmap = Bitmap.createBitmap(frame.getWidth(), frame.getHeight(), Bitmap.Config.RGB_565);
+                ByteBuffer buffer = ByteBuffer.wrap(frame.getData());
+                bitmap.copyPixelsFromBuffer(buffer);
 
-                if (bitmap != null) {
-                    surfaceView.updateFrame(bitmap);
-                }
+                surfaceView.updateFrame(bitmap);
 
             }
         } catch (Exception e) {

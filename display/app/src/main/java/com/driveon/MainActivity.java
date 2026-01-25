@@ -38,6 +38,11 @@ public class MainActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
+    @Override
+    protected void onDestroy(){
+        super.onDestroy();
+        network.disconnect();
+    }
 
 
     @Override

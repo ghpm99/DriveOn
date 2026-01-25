@@ -25,13 +25,17 @@ public class Network implements OnTouchEventListener {
     }
 
     private Socket getSocket() throws SocketException {
-        if (this.socket == null) {
+        if (this.socket == null || !this.socket.isConnected()) {
             throw new SocketException("Socket nao conectado");
         }
         return this.socket;
     }
 
-    public void connect() {
+    public synchronized void connect() {
+        if(this.socket != null && this.socket.isConnected()){
+            Log.d("Network", "Já conectado");
+            return;
+        }
         new Thread(() -> {
             Log.d("Network", "Tentando conectar");
             this.socket = new Socket();
@@ -83,17 +87,23 @@ public class Network implements OnTouchEventListener {
         sendString(msg);
     }
 
-    public byte[] receiveFrame() {
+    public FrameDTO receiveFrame() {
         try {
+            FrameDTO frame = new FrameDTO();
             DataInputStream in = new DataInputStream(getSocket().getInputStream());
-            int frameSize = in.readInt();
-            if (frameSize <= 0 || frameSize > 5_000_000) {
-                return null;
-            }
-            byte[] jpeg = new byte[frameSize];
-            in.readFully(jpeg);
-            sendAck();
-            return jpeg;
+            Log.d("Network", "Waiting for frame...");
+            Log.d("Network", "Recebendo width");
+            frame.setWidth(in.readInt());
+            Log.d("Network", "Recebendo height");
+            frame.setHeight(in.readInt());
+            Log.d("Network", "Recebendo frameSize");
+            frame.setFrameSize(in.readInt());
+            Log.d("Network", "Recebendo data");
+            byte[] data = new byte[frame.getFrameSize()];
+            in.readFully(data);
+            frame.setData(data);
+            Log.d("Network", "Frame received");
+            return frame;
         }catch (IOException e){
             Log.d("Network", e.getMessage());
             return null;
