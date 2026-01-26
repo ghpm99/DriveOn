@@ -20,8 +20,6 @@ type Client struct {
 	conn        net.Conn
 	sendChannel chan []byte
 	alive       atomic.Bool
-	ackChan     chan struct{}
-	frameBuffer chan render.Frame
 }
 
 var currentClient atomic.Pointer[Client]
@@ -50,8 +48,6 @@ func Start() error {
 		client := &Client{
 			conn:        conn,
 			sendChannel: make(chan []byte, 4),
-			ackChan:     make(chan struct{}, 1),
-			frameBuffer: make(chan render.Frame, 2),
 		}
 
 		client.alive.Store(true)
@@ -78,14 +74,6 @@ func handleRead(c *Client) {
 		}
 
 		log.Print("Recebido: ", line)
-		if line == "ACK\n" {
-			log.Println("postando no channel")
-			select {
-			case c.ackChan <- struct{}{}:
-			default:
-
-			}
-		}
 		// TODO: parse TOUCH, comandos, etc
 	}
 }
@@ -94,6 +82,7 @@ func handleWrite(c *Client) {
 	defer c.conn.Close()
 
 	for frame := range c.sendChannel {
+		log.Println("Enviando:", frame)
 		_, err := c.conn.Write(frame)
 		if err != nil {
 			log.Println("Erro enviando frame:", err)
@@ -121,8 +110,6 @@ func (c *Client) sendFrame(frame render.Frame) {
 	case c.sendChannel <- buf.Bytes():
 	default:
 	}
-	log.Println("Aguardando ACK")
-	<-c.ackChan
 }
 
 func SendFrameToDisplay(frame render.Frame) {

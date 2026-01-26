@@ -20,6 +20,7 @@ type Renderer struct {
 	scene             int
 	width, height     int32
 	Infos             []*Info
+	FrameBuffer       chan Frame
 }
 
 type Frame struct {
@@ -59,13 +60,14 @@ func New(width, height int32) (*Renderer, error) {
 	}
 
 	return &Renderer{
-		window:   w,
-		renderer: r,
-		font:     font,
-		lastTime: time.Now(),
-		scene:    1,
-		width:    width,
-		height:   height,
+		window:      w,
+		renderer:    r,
+		font:        font,
+		lastTime:    time.Now(),
+		scene:       1,
+		width:       width,
+		height:      height,
+		FrameBuffer: make(chan Frame, 2),
 	}, nil
 }
 
@@ -105,7 +107,7 @@ func (r *Renderer) Draw() error {
 	return nil
 }
 
-func (r *Renderer) ReadScreen() (Frame, error) {
+func (r *Renderer) ReadScreen() error {
 	w, h, _ := r.renderer.GetOutputSize()
 	pixels := make([]byte, w*h*2)
 
@@ -117,15 +119,17 @@ func (r *Renderer) ReadScreen() (Frame, error) {
 	)
 
 	if err != nil {
-		return Frame{}, err
+		return err
 	}
 
-	return Frame{
+	r.FrameBuffer <- Frame{
 		Data:      pixels,
 		Width:     w,
 		Height:    h,
 		FrameSize: int32(len(pixels)),
-	}, nil
+	}
+
+	return nil
 }
 
 func (r *Renderer) updateFPS() {

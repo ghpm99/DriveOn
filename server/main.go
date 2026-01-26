@@ -75,6 +75,7 @@ func (driveON *DriveOn) run() {
 	})
 
 	driveON.running = true
+	go driveON.sendFrameToDisplay()
 
 	driveON.mainLoop()
 }
@@ -83,6 +84,13 @@ func startServer() {
 	err := net.Start()
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+func (driveON *DriveOn) sendFrameToDisplay() {
+	for frame := range driveON.render.FrameBuffer {
+		log.Println("Enviando frame")
+		net.SendFrameToDisplay(frame)
 	}
 }
 
@@ -101,13 +109,12 @@ func (driveON *DriveOn) mainLoop() {
 		}
 
 		log.Println("Lendo frame")
-		frame, err := driveON.render.ReadScreen()
+		err := driveON.render.ReadScreen()
 
 		if err != nil {
 			log.Println("Erro ao capturar tela:", err)
 		}
-		log.Println("Enviando frame")
-		net.SendFrameToDisplay(frame)
+
 	}
 }
 
