@@ -19,6 +19,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Log.d("MainActivity", "onCreate");
 
         sensorDTO = new SensorDTO();
         sensorListener = new SensorListener(this,sensorDTO);

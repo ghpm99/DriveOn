@@ -22,7 +22,6 @@ public class FrameClient implements Runnable {
         try {
             while (true) {
                 FrameDTO frame = network.receiveFrame();
-                network.sendAck();
 
                 if (!frame.isValid()) {
                     Log.d("Network", "Invalid frame received");

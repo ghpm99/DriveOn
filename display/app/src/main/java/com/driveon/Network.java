@@ -43,7 +43,6 @@ public class Network implements OnTouchEventListener {
             try {
                 socket.connect(socketAddress, 5000); // 5 seconds timeout
                 Log.d("Network", "Connected to server: " + serverAddress + ":" + serverPort);
-                sendAck();
             } catch (IOException e) {
                 Log.e("Network", "Connection failed: " + e.getMessage());
             }
@@ -76,10 +75,6 @@ public class Network implements OnTouchEventListener {
         } catch (IOException e) {
             Log.e("Network", "Failed to send message: " + e.getMessage());
         }
-    }
-
-    public void sendAck(){
-        sendString("ACK");
     }
 
     public void onTouch(float x, float y, int action) {
