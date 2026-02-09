@@ -22,7 +22,7 @@ type Client struct {
 	alive       atomic.Bool
 }
 
-var currentClient atomic.Pointer[Client]
+var CurrentClient atomic.Pointer[Client]
 
 func Start() error {
 	// TODO:
@@ -52,12 +52,35 @@ func Start() error {
 
 		client.alive.Store(true)
 
-		currentClient.Store(client)
+		CurrentClient.Store(client)
 
-		go handleRead(client)
-		go handleWrite(client)
+		go handshake(client)
 	}
 
+}
+
+func handshake(client *Client) {
+	reader := bufio.NewReader(client.conn)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return
+	}
+
+	if line != "HELLO\n" {
+		log.Printf("handshake falhou, mensagem inesperada: %s", line)
+		return
+	}
+
+	log.Println("Handshake recebido, enviando WELCOME")
+
+	_, err = client.conn.Write([]byte("WELCOME\n"))
+	if err != nil {
+		log.Println("Erro enviando WELCOME:", err)
+		return
+	}
+	log.Println("Handshake completo, iniciando comunicação com o tablet")
+	go handleRead(client)
+	go handleWrite(client)
 }
 
 func handleRead(c *Client) {
@@ -82,7 +105,7 @@ func handleWrite(c *Client) {
 	defer c.conn.Close()
 
 	for frame := range c.sendChannel {
-		log.Println("Enviando:", frame)
+		log.Println("Enviando frame, tamanho:", len(frame))
 		_, err := c.conn.Write(frame)
 		if err != nil {
 			log.Println("Erro enviando frame:", err)
@@ -106,14 +129,11 @@ func (c *Client) sendFrame(frame render.Frame) {
 	log.Println("Escrevendo data")
 	buf.Write(frame.Data)
 
-	select {
-	case c.sendChannel <- buf.Bytes():
-	default:
-	}
+	c.sendChannel <- buf.Bytes()
 }
 
 func SendFrameToDisplay(frame render.Frame) {
-	client := currentClient.Load()
+	client := CurrentClient.Load()
 	if client != nil && client.alive.Load() {
 		client.sendFrame(frame)
 	}

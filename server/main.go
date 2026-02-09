@@ -89,7 +89,6 @@ func startServer() {
 
 func (driveON *DriveOn) sendFrameToDisplay() {
 	for frame := range driveON.render.FrameBuffer {
-		log.Println("Enviando frame")
 		net.SendFrameToDisplay(frame)
 	}
 }
@@ -108,7 +107,6 @@ func (driveON *DriveOn) mainLoop() {
 			log.Println(err)
 		}
 
-		log.Println("Lendo frame")
 		err := driveON.render.ReadScreen()
 
 		if err != nil {
