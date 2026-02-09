@@ -18,6 +18,9 @@ public class Network implements OnTouchEventListener {
     private int serverPort = 9000;
     private Socket socket;
 
+    private DataOutputStream dataOutputStream;
+    private DataInputStream dataInputStream;
+
 
     public Network(SensorDTO sensorDTO) {
         this.sensorDTO = sensorDTO;
@@ -43,10 +46,37 @@ public class Network implements OnTouchEventListener {
             try {
                 socket.connect(socketAddress, 5000); // 5 seconds timeout
                 Log.d("Network", "Connected to server: " + serverAddress + ":" + serverPort);
+                startDataStream();
+                handshake();
             } catch (IOException e) {
                 Log.e("Network", "Connection failed: " + e.getMessage());
             }
         }).start();
+
+    }
+
+    private void startDataStream(){
+        try {
+            dataOutputStream = new DataOutputStream(getSocket().getOutputStream());
+            dataInputStream = new DataInputStream(getSocket().getInputStream());
+
+        } catch (Exception e){
+            Log.e("Network", "Failed to start data stream: " + e.getMessage());
+        }
+    }
+
+    private void handshake(){
+        try {
+
+            sendString("HELLO");
+            String response = null;
+            response = dataInputStream.readLine();
+
+        Log.d("Network", "Handshake response: " + response);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
     }
 
     public void disconnect() {
@@ -66,9 +96,6 @@ public class Network implements OnTouchEventListener {
 
     private void sendString(String message) {
         try {
-            OutputStream outputStream = getSocket().getOutputStream();
-            DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
-
             dataOutputStream.write((message + "\n").getBytes("UTF-8"));
             dataOutputStream.flush();
             Log.d("Network", "Message sent: " + message);
@@ -83,25 +110,31 @@ public class Network implements OnTouchEventListener {
     }
 
     public FrameDTO receiveFrame() {
+        FrameDTO frame = new FrameDTO();
         try {
-            FrameDTO frame = new FrameDTO();
-            DataInputStream in = new DataInputStream(getSocket().getInputStream());
             Log.d("Network", "Waiting for frame...");
             Log.d("Network", "Recebendo width");
-            frame.setWidth(in.readInt());
+            frame.setWidth(dataInputStream.readInt());
             Log.d("Network", "Recebendo height");
-            frame.setHeight(in.readInt());
+            frame.setHeight(dataInputStream.readInt());
             Log.d("Network", "Recebendo frameSize");
-            frame.setFrameSize(in.readInt());
+            frame.setFrameSize(dataInputStream.readInt());
             Log.d("Network", "Recebendo data");
             byte[] data = new byte[frame.getFrameSize()];
-            in.readFully(data);
+            dataInputStream.readFully(data);
             frame.setData(data);
             Log.d("Network", "Frame received");
+            frame.setValid(true);
             return frame;
         }catch (IOException e){
             Log.d("Network", e.getMessage());
-            return null;
+            frame.setValid(false);
+            return frame;
         }
+    }
+
+    public boolean isConnected(){
+        return this.socket != null && this.socket.isConnected();
+
     }
 }

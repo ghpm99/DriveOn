@@ -7,6 +7,8 @@ public class FrameDTO {
     private int frameSize;
     private byte[] data;
 
+    private boolean isValid;
+
     public int getWidth() {
         return width;
     }
@@ -37,8 +39,11 @@ public class FrameDTO {
         this.data = data;
     }
 
+    public void setValid(boolean isValid){
+        this.isValid = isValid;
+    }
     public boolean isValid(){
-        return data.length == frameSize && width > 0 && height > 0;
+        return isValid && data.length == frameSize && width > 0 && height > 0;
     }
 
 
