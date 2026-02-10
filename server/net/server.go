@@ -88,7 +88,7 @@ func handleRead(c *Client) {
 
 	reader := bufio.NewReader(c.conn)
 
-	for {
+	for c.alive.Load() {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			log.Println("Cliente desconectou (read)")
@@ -105,6 +105,9 @@ func handleWrite(c *Client) {
 	defer c.conn.Close()
 
 	for frame := range c.sendChannel {
+		if !c.alive.Load() {
+			return
+		}
 		log.Println("Enviando frame, tamanho:", len(frame))
 		_, err := c.conn.Write(frame)
 		if err != nil {
@@ -137,4 +140,10 @@ func SendFrameToDisplay(frame render.Frame) {
 	if client != nil && client.alive.Load() {
 		client.sendFrame(frame)
 	}
+}
+
+func (c *Client) Close() {
+	close(c.sendChannel)
+	c.conn.Close()
+	c.alive.Store(false)
 }
