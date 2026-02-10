@@ -17,6 +17,7 @@ public class Network implements OnTouchEventListener {
     private SensorDTO sensorDTO;
     private int serverPort = 9000;
     private Socket socket;
+    private byte[] buffer;
 
     private DataOutputStream dataOutputStream;
     private DataInputStream dataInputStream;
@@ -112,18 +113,14 @@ public class Network implements OnTouchEventListener {
     public FrameDTO receiveFrame() {
         FrameDTO frame = new FrameDTO();
         try {
-            Log.d("Network", "Waiting for frame...");
-            Log.d("Network", "Recebendo width");
             frame.setWidth(dataInputStream.readInt());
-            Log.d("Network", "Recebendo height");
             frame.setHeight(dataInputStream.readInt());
-            Log.d("Network", "Recebendo frameSize");
             frame.setFrameSize(dataInputStream.readInt());
-            Log.d("Network", "Recebendo data");
-            byte[] data = new byte[frame.getFrameSize()];
-            dataInputStream.readFully(data);
-            frame.setData(data);
-            Log.d("Network", "Frame received");
+            if(buffer == null || buffer.length != frame.getFrameSize()){
+                buffer = new byte[frame.getFrameSize()];
+            }
+            dataInputStream.readFully(buffer);
+            frame.setData(buffer);
             frame.setValid(true);
             return frame;
         }catch (IOException e){

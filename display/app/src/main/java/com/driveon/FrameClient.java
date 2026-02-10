@@ -10,6 +10,8 @@ public class FrameClient implements Runnable {
 
     private final Network network;
     private final FrameSurfaceView surfaceView;
+    private Bitmap reusableBitmap;
+    private ByteBuffer pixelBuffer;
 
     public FrameClient(Network network, FrameSurfaceView view) {
         this.network = network;
@@ -36,12 +38,22 @@ public class FrameClient implements Runnable {
                     continue;
                 }
 
-                // 🖼️ Decodifica JPEG → Bitmap
-                Bitmap bitmap = Bitmap.createBitmap(frame.getWidth(), frame.getHeight(), Bitmap.Config.RGB_565);
-                ByteBuffer buffer = ByteBuffer.wrap(frame.getData());
-                bitmap.copyPixelsFromBuffer(buffer);
+                if(reusableBitmap == null){
+                    reusableBitmap = Bitmap.createBitmap(frame.getWidth(), frame.getHeight(), Bitmap.Config.RGB_565);
+                    pixelBuffer = ByteBuffer.allocate(frame.getFrameSize());
 
-                surfaceView.updateFrame(bitmap);
+                }
+
+                if(pixelBuffer.capacity() != frame.getFrameSize()){
+                    pixelBuffer = ByteBuffer.allocate(frame.getFrameSize());
+                }
+
+                pixelBuffer.clear();
+                pixelBuffer.put(frame.getData());
+                pixelBuffer.rewind();
+                reusableBitmap.copyPixelsFromBuffer(pixelBuffer);
+
+                surfaceView.updateFrame(reusableBitmap);
 
             }
         } catch (Exception e) {
