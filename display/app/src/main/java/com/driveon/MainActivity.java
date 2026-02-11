@@ -24,7 +24,7 @@ public class MainActivity extends Activity {
         sensorDTO = new SensorDTO();
         sensorListener = new SensorListener(this,sensorDTO);
         network = new Network(sensorDTO);
-        network.connect();
+        network.startServer();
 
         view = new FrameSurfaceView(this, network, sensorDTO);
         setContentView(view);

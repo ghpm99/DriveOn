@@ -7,13 +7,13 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketException;
 
 public class Network implements OnTouchEventListener {
 
-    private final String serverAddress = "192.168.18.7";
     private SensorDTO sensorDTO;
     private int serverPort = 9000;
     private Socket socket;
@@ -35,25 +35,25 @@ public class Network implements OnTouchEventListener {
         return this.socket;
     }
 
-    public synchronized void connect() {
-        if(this.socket != null && this.socket.isConnected()){
-            Log.d("Network", "Já conectado");
-            return;
-        }
+    public synchronized void startServer(){
         new Thread(() -> {
-            Log.d("Network", "Tentando conectar");
-            this.socket = new Socket();
-            SocketAddress socketAddress = new InetSocketAddress(serverAddress, serverPort);
             try {
-                socket.connect(socketAddress, 5000); // 5 seconds timeout
-                Log.d("Network", "Connected to server: " + serverAddress + ":" + serverPort);
-                startDataStream();
-                handshake();
-            } catch (IOException e) {
-                Log.e("Network", "Connection failed: " + e.getMessage());
-            }
-        }).start();
+                ServerSocket serverSocket = new ServerSocket(serverPort);
+                Log.d("Network", "Server started on port " + serverPort);
 
+                while (true) {
+                    Socket clientSocket = serverSocket.accept();
+                    Log.d("Network", "Client connected: " + clientSocket.getInetAddress());
+
+                    this.socket = clientSocket;
+                    startDataStream();
+                    handshake();
+
+                }
+        }catch(Exception e){
+                e.printStackTrace();
+        }
+        });
     }
 
     private void startDataStream(){
