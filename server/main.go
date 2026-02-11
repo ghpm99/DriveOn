@@ -81,7 +81,7 @@ func (driveON *DriveOn) run() {
 }
 
 func startServer() {
-	err := net.Start()
+	err := net.NewDisplay().Start()
 	if err != nil {
 		log.Fatal(err)
 	}

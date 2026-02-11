@@ -8,67 +8,77 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type Server struct {
 	listener *net.Listener
-	client   *Client
+	display  *Display
 }
 
-type Client struct {
+type Display struct {
+	addr        string
 	conn        net.Conn
 	sendChannel chan []byte
-	alive       atomic.Bool
+	mu          sync.RWMutex
 }
 
-var CurrentClient atomic.Pointer[Client]
+var DisplayClient atomic.Pointer[Display]
 
-func Start() error {
-	// TODO:
-	// - TCP listener
-	// - receber eventos touch
-	// - enviar frames
+var displayIp = "192.168.42.129"
+var displayPort = "9000"
 
-	listener, err := net.Listen("tcp", ":9000")
-	if err != nil {
-		return err
-	}
-	defer listener.Close()
-	fmt.Println("Servidor aguardando tablet na porta 9000...")
+func NewDisplay() *Display {
+	return &Display{addr: displayIp + ":" + displayPort, sendChannel: make(chan []byte, 10)}
+}
 
+func (td *Display) Start() error {
 	for {
-		conn, err := listener.Accept()
+
+		conn, err := net.DialTimeout("tcp", td.addr, 2*time.Second)
 		if err != nil {
-			log.Println("Erro ao aceitar conexão:", err)
+			fmt.Printf("Aguardando tablet em %s...\n", td.addr)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
-		fmt.Println("Tablet conectado:", conn.RemoteAddr())
-		client := &Client{
-			conn:        conn,
-			sendChannel: make(chan []byte, 4),
+		if err := td.handshake(); err != nil {
+			fmt.Println("Falha no handshake:", err)
+			conn.Close()
+			time.Sleep(2 * time.Second)
+			continue
 		}
 
-		client.alive.Store(true)
+		// 3. Sucesso! Guarda a conexão
+		td.mu.Lock()
+		td.conn = conn
+		td.mu.Unlock()
 
-		CurrentClient.Store(client)
+		fmt.Println("Conectado e pronto para streaming!")
 
-		go handshake(client)
+		// 4. Inicia a escuta de sensores (bloqueia aqui até cair)
+
+		// Se chegou aqui, a conexão caiu
+		td.mu.Lock()
+		td.conn = nil
+		td.mu.Unlock()
+
 	}
 
 }
 
-func handshake(client *Client) {
+func (client *Display) handshake() error {
 	reader := bufio.NewReader(client.conn)
 	line, err := reader.ReadString('\n')
 	if err != nil {
-		return
+		return err
 	}
 
 	if line != "HELLO\n" {
-		log.Printf("handshake falhou, mensagem inesperada: %s", line)
-		return
+		return fmt.Errorf("handshake falhou, mensagem inesperada: %s", line)
+
 	}
 
 	log.Println("Handshake recebido, enviando WELCOME")
@@ -76,23 +86,30 @@ func handshake(client *Client) {
 	_, err = client.conn.Write([]byte("WELCOME\n"))
 	if err != nil {
 		log.Println("Erro enviando WELCOME:", err)
-		return
+		return err
 	}
 	log.Println("Handshake completo, iniciando comunicação com o tablet")
-	go handleRead(client)
+	go client.handleRead()
 	go handleWrite(client)
+	return nil
 }
 
-func handleRead(c *Client) {
-	defer c.conn.Close()
+func (td *Display) handleRead() {
+	defer td.conn.Close()
 
-	reader := bufio.NewReader(c.conn)
-
-	for c.alive.Load() {
+	for {
+		td.mu.RLock()
+		c := td.conn
+		td.mu.RUnlock()
+		if c == nil {
+			log.Println("Conexão perdida, parando leitura")
+			return
+		}
+		reader := bufio.NewReader(c)
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			log.Println("Cliente desconectou (read)")
-			c.alive.Store(false)
+
 			return
 		}
 
@@ -101,24 +118,24 @@ func handleRead(c *Client) {
 	}
 }
 
-func handleWrite(c *Client) {
+func handleWrite(c *Display) {
 	defer c.conn.Close()
 
 	for frame := range c.sendChannel {
-		if !c.alive.Load() {
+		if c.conn == nil {
 			return
 		}
 		log.Println("Enviando frame, tamanho:", len(frame))
 		_, err := c.conn.Write(frame)
 		if err != nil {
 			log.Println("Erro enviando frame:", err)
-			c.alive.Store(false)
+
 			return
 		}
 	}
 }
 
-func (c *Client) sendFrame(frame render.Frame) {
+func (c *Display) sendFrame(frame render.Frame) {
 
 	var buf bytes.Buffer
 	log.Println("Tamanho msg:", frame.FrameSize+12)
@@ -136,14 +153,13 @@ func (c *Client) sendFrame(frame render.Frame) {
 }
 
 func SendFrameToDisplay(frame render.Frame) {
-	client := CurrentClient.Load()
-	if client != nil && client.alive.Load() {
+	client := DisplayClient.Load()
+	if client != nil && client.conn != nil {
 		client.sendFrame(frame)
 	}
 }
 
-func (c *Client) Close() {
+func (c *Display) Close() {
 	close(c.sendChannel)
 	c.conn.Close()
-	c.alive.Store(false)
 }
