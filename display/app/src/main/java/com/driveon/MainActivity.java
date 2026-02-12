@@ -8,7 +8,7 @@ public class MainActivity extends Activity {
 
     private FrameSurfaceView view;
     private TelemetryManager telemetry;
-    private NetworkWorker worker;
+    private ConnectionManager connectionManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -17,14 +17,15 @@ public class MainActivity extends Activity {
         // 1. Inicializa Sensores e Tela
         telemetry = new TelemetryManager(this);
         view = new FrameSurfaceView(this);
+        connectionManager = new ConnectionManager(view, telemetry);
+        view.setConnectionManager(connectionManager);
+
+        connectionManager.start();
+
         setContentView(view);
 
-        // 2. Mantém tela ligada
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        // 3. Inicia Worker de Rede
-        worker = new NetworkWorker(view, telemetry);
-        worker.start();
     }
 
     @Override
@@ -42,6 +43,6 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        worker.shutdown();
+        connectionManager.stop();
     }
 }

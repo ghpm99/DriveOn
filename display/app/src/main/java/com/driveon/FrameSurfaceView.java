@@ -18,6 +18,12 @@ public class FrameSurfaceView extends SurfaceView implements SurfaceHolder.Callb
     public volatile float touchX, touchY;
     public volatile int touchAction;
 
+    private ConnectionManager connectionManager;
+
+    public void setConnectionManager(ConnectionManager cm) {
+        this.connectionManager = cm;
+    }
+
     public FrameSurfaceView(Context context) {
         super(context);
         holder = getHolder();
@@ -42,12 +48,24 @@ public class FrameSurfaceView extends SurfaceView implements SurfaceHolder.Callb
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        // Apenas armazena os valores. O NetworkWorker vai serializar e enviar.
-        // Isso evita travar a UI Thread com I/O de rede.
-        this.touchX = event.getX();
-        this.touchY = event.getY();
-        this.touchAction = event.getActionMasked();
-        this.hasPendingTouch = true;
+        if (connectionManager == null) return true;
+
+        int action = event.getActionMasked();
+
+        // Otimização: Não precisamos de TODOS os moves se o Tablet for lento.
+        // Mas para desenhar preciso, enviamos todos. O buffer TCP segura a onda.
+
+        // Formata string "TOUCH X Y ACTION\n"
+        // StringBuilder local é rápido na UI Thread
+        StringBuilder sb = new StringBuilder(32);
+        sb.append("TOUCH ");
+        sb.append((int)event.getX()).append(" ");
+        sb.append((int)event.getY()).append(" ");
+        sb.append(action).append("\n");
+
+        // Adiciona na fila Thread-Safe (não bloqueia a UI)
+        connectionManager.touchQueue.offer(sb.toString());
+
         return true;
     }
 
