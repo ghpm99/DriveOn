@@ -1,61 +1,47 @@
 package com.driveon;
 
 import android.app.Activity;
-
 import android.os.Bundle;
-import android.util.Log;
 import android.view.WindowManager;
-
-import java.util.List;
 
 public class MainActivity extends Activity {
 
     private FrameSurfaceView view;
-    private SensorListener sensorListener;
-    private SensorDTO sensorDTO;
-    private Network network;
-    private FrameClient frameClient;
+    private TelemetryManager telemetry;
+    private NetworkWorker worker;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        Log.d("MainActivity", "onCreate");
 
-        sensorDTO = new SensorDTO();
-        sensorListener = new SensorListener(this,sensorDTO);
-        network = new Network(sensorDTO);
-        network.startServer();
-
-        view = new FrameSurfaceView(this, network, sensorDTO);
+        // 1. Inicializa Sensores e Tela
+        telemetry = new TelemetryManager(this);
+        view = new FrameSurfaceView(this);
         setContentView(view);
 
-        frameClient = new FrameClient(network, view);
-
-        new Thread(
-                frameClient
-        ).start();
-
-
+        // 2. Mantém tela ligada
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-    }
 
-    @Override
-    protected void onDestroy(){
-        super.onDestroy();
-        network.disconnect();
+        // 3. Inicia Worker de Rede
+        worker = new NetworkWorker(view, telemetry);
+        worker.start();
     }
-
 
     @Override
     protected void onResume() {
         super.onResume();
-
-        sensorListener.start();
+        telemetry.start();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        sensorListener.stop();
+        telemetry.stop(); // Importante para salvar bateria se o app for para segundo plano
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        worker.shutdown();
     }
 }
