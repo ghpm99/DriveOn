@@ -5,7 +5,7 @@ import (
 	"log"
 	"math/rand"
 
-	"driveon/net"
+	"driveon/displaylink"
 	"driveon/render"
 
 	"github.com/veandco/go-sdl2/sdl"
@@ -28,10 +28,10 @@ type SmoothValue struct {
 }
 
 type DriveOn struct {
-	render  *render.Renderer
-	server  *net.Server
-	running bool
-	scene   Scene
+	render      *render.Renderer
+	displaylink *displaylink.ConnectionManager
+	running     bool
+	scene       Scene
 }
 
 func main() {
@@ -49,7 +49,9 @@ func (driveON *DriveOn) run() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	go startServer()
+
+	driveON.displaylink = displaylink.New("192.168.42.129", "9000")
+	go driveON.displaylink.Start()
 
 	driveON.render = r
 
@@ -80,16 +82,12 @@ func (driveON *DriveOn) run() {
 	driveON.mainLoop()
 }
 
-func startServer() {
-	err := net.NewDisplay().Start()
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
 func (driveON *DriveOn) sendFrameToDisplay() {
 	for frame := range driveON.render.FrameBuffer {
-		net.SendFrameToDisplay(frame)
+		select {
+		case driveON.displaylink.FrameInput <- frame:
+		default:
+		}
 	}
 }
 

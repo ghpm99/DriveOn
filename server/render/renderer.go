@@ -1,6 +1,7 @@
 package render
 
 import (
+	"driveon/dtos"
 	"fmt"
 	"time"
 	"unsafe"
@@ -20,12 +21,8 @@ type Renderer struct {
 	scene             int
 	width, height     int32
 	Infos             []*Info
-	FrameBuffer       chan Frame
-}
-
-type Frame struct {
-	Width, Height, FrameSize int32
-	Data                     []byte
+	FrameBuffer       chan dtos.Frame
+	pixelBuffer       []byte
 }
 
 func New(width, height int32) (*Renderer, error) {
@@ -67,7 +64,8 @@ func New(width, height int32) (*Renderer, error) {
 		scene:       1,
 		width:       width,
 		height:      height,
-		FrameBuffer: make(chan Frame, 2),
+		FrameBuffer: make(chan dtos.Frame, 2),
+		pixelBuffer: make([]byte, width*height*2),
 	}, nil
 }
 
@@ -109,12 +107,16 @@ func (r *Renderer) Draw() error {
 
 func (r *Renderer) ReadScreen() error {
 	w, h, _ := r.renderer.GetOutputSize()
-	pixels := make([]byte, w*h*2)
+
+	requiredSize := int(w * h * 2)
+	if len(r.pixelBuffer) < requiredSize {
+		r.pixelBuffer = make([]byte, requiredSize)
+	}
 
 	err := r.renderer.ReadPixels(
 		nil,
 		sdl.PIXELFORMAT_RGB565,
-		unsafe.Pointer(&pixels[0]),
+		unsafe.Pointer(&r.pixelBuffer[0]),
 		int(w)*2,
 	)
 
@@ -122,11 +124,14 @@ func (r *Renderer) ReadScreen() error {
 		return err
 	}
 
-	r.FrameBuffer <- Frame{
-		Data:      pixels,
+	dataToSend := make([]byte, requiredSize)
+	copy(dataToSend, r.pixelBuffer)
+
+	r.FrameBuffer <- dtos.Frame{
+		Data:      dataToSend,
 		Width:     w,
 		Height:    h,
-		FrameSize: int32(len(pixels)),
+		FrameSize: int32(requiredSize),
 	}
 
 	return nil
