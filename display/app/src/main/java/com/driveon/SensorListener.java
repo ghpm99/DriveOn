@@ -11,8 +11,8 @@ import java.util.List;
 
 public class SensorListener implements SensorEventListener {
 
-    private Context context;
-    private SensorDTO sensorDTO;
+    private final Context context;
+    private final SensorDTO sensorDTO;
     private final SensorManager sensorManager;
     private final Sensor accel;
     private final Sensor orientation;
@@ -35,7 +35,7 @@ public class SensorListener implements SensorEventListener {
 
 
     private void listSensors() {
-        SensorManager sm = (SensorManager) context.getSystemService(context.SENSOR_SERVICE);
+        SensorManager sm = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         List<Sensor> sensors = sm.getSensorList(Sensor.TYPE_ALL);
 
         for (Sensor s : sensors) {

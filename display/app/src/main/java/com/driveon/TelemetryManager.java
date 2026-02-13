@@ -26,7 +26,7 @@ public class TelemetryManager implements SensorEventListener, LocationListener {
 
     // Filtro Low-Pass (Simples e eficiente)
     private static final float ALPHA = 0.8f;
-    private float gravity[] = new float[3];
+    private final float[] gravity = new float[3];
 
     public TelemetryManager(Context context) {
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);

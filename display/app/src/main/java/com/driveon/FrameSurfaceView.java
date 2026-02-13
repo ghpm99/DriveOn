@@ -10,7 +10,7 @@ import android.view.SurfaceView;
 
 public class FrameSurfaceView extends SurfaceView implements SurfaceHolder.Callback {
 
-    private SurfaceHolder holder;
+    private final SurfaceHolder holder;
     private Rect dstRect; // Aloca uma vez
 
     // Variáveis "Dirty" para o NetworkWorker ler
@@ -57,14 +57,13 @@ public class FrameSurfaceView extends SurfaceView implements SurfaceHolder.Callb
 
         // Formata string "TOUCH X Y ACTION\n"
         // StringBuilder local é rápido na UI Thread
-        StringBuilder sb = new StringBuilder(32);
-        sb.append("TOUCH ");
-        sb.append((int)event.getX()).append(" ");
-        sb.append((int)event.getY()).append(" ");
-        sb.append(action).append("\n");
+        String sb = "TOUCH " +
+                (int) event.getX() + " " +
+                (int) event.getY() + " " +
+                action + "\n";
 
         // Adiciona na fila Thread-Safe (não bloqueia a UI)
-        connectionManager.touchQueue.offer(sb.toString());
+        connectionManager.touchQueue.offer(sb);
 
         return true;
     }

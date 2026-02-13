@@ -13,14 +13,13 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class ConnectionManager {
 
+    // Fila Thread-Safe para o Touch (Garante ordem e não perde cliques)
+    public final LinkedBlockingQueue<String> touchQueue = new LinkedBlockingQueue<String>();
     private final FrameSurfaceView view;
     private final TelemetryManager telemetry;
     private ServerSocket serverSocket;
     private Socket clientSocket;
     private boolean running = false;
-
-    // Fila Thread-Safe para o Touch (Garante ordem e não perde cliques)
-    public final LinkedBlockingQueue<String> touchQueue = new LinkedBlockingQueue<String>();
 
     public ConnectionManager(FrameSurfaceView view, TelemetryManager telemetry) {
         this.view = view;
@@ -34,7 +33,10 @@ public class ConnectionManager {
 
     public void stop() {
         running = false;
-        try { if (serverSocket != null) serverSocket.close(); } catch (Exception e) {}
+        try {
+            if (serverSocket != null) serverSocket.close();
+        } catch (Exception e) {
+        }
     }
 
     // Thread 1: Aguarda conexão e inicia os trabalhos
@@ -74,12 +76,14 @@ public class ConnectionManager {
 
     // Thread 2: RECEPTOR DE VÍDEO (Alta prioridade, consome muita banda)
     private class VideoReceiver implements Runnable {
-        private Socket socket;
+        private final Socket socket;
         private byte[] pixelData;
         private ByteBuffer pixelBuffer;
         private Bitmap reusableBitmap;
 
-        public VideoReceiver(Socket s) { this.socket = s; }
+        public VideoReceiver(Socket s) {
+            this.socket = s;
+        }
 
         @Override
         public void run() {
@@ -88,6 +92,8 @@ public class ConnectionManager {
 
                 // Handshake Entrada (Lê HELLO)
                 // ... (Implementar leitura do HELLO se necessário, ou assumir conexao ok)
+                String line = in.readLine();
+                if (!"HELLO".equals(line)) throw new IOException("Invalid handshake");
 
                 while (running && !socket.isClosed()) {
                     int magic = in.readInt(); // Bloqueia aqui esperando dados
@@ -118,10 +124,12 @@ public class ConnectionManager {
     // Thread 3: TRANSMISSOR DE DADOS (Touch + Sensores)
     // Controla a taxa de envio (20Hz sensores, Touch imediato)
     private class DataTransmitter implements Runnable {
-        private Socket socket;
-        private StringBuilder sb = new StringBuilder(128);
+        private final Socket socket;
+        private final StringBuilder sb = new StringBuilder(128);
 
-        public DataTransmitter(Socket s) { this.socket = s; }
+        public DataTransmitter(Socket s) {
+            this.socket = s;
+        }
 
         @Override
         public void run() {
@@ -129,8 +137,8 @@ public class ConnectionManager {
                 BufferedOutputStream out = new BufferedOutputStream(socket.getOutputStream());
 
                 // Handshake Saída
-                // out.write("WELCOME\n".getBytes());
-                // out.flush();
+                out.write("WELCOME\n".getBytes());
+                out.flush();
 
                 long lastSensorTime = 0;
                 long SENSOR_INTERVAL_MS = 50; // 20Hz (1000ms / 20)
@@ -171,7 +179,11 @@ public class ConnectionManager {
                     } else {
                         // Se não tem nada pra fazer, dorme um pouco para economizar CPU
                         // Dorme 5ms (aprox 200Hz de polling rate no touch)
-                        try { Thread.sleep(5); } catch (InterruptedException e) { break; }
+                        try {
+                            Thread.sleep(5);
+                        } catch (InterruptedException e) {
+                            break;
+                        }
                     }
                 }
             } catch (IOException e) {
