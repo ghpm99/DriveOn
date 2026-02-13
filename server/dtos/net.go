@@ -14,3 +14,11 @@ type FrameHeader struct {
 	Height   uint32
 	DataSize uint32
 }
+
+type TelemetryData struct {
+	AccX, AccY, AccZ float64
+	Light            float64
+	Lat, Lon         float64
+	Speed            float64
+	HasGPS           bool
+}

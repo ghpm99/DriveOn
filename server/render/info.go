@@ -27,8 +27,9 @@ func (r *Renderer) drawInfos(infos []*Info, startX, startY, lineHeight int32) er
 	cardWidth := totalWidth / 5
 
 	for i, info := range infos {
-
-		r.drawInfo(info, startX+int32(i)*cardWidth, startY, lineHeight)
+		y := startY + int32(i/5)*lineHeight
+		x := startX + int32(i%5)*cardWidth
+		r.drawInfo(info, x, y, lineHeight)
 	}
 	return nil
 }

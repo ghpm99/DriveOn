@@ -23,6 +23,7 @@ type Renderer struct {
 	Infos             []*Info
 	FrameBuffer       chan dtos.Frame
 	pixelBuffer       []byte
+	TouchCursor       chan dtos.TouchEvent
 }
 
 func New(width, height int32) (*Renderer, error) {
@@ -66,6 +67,7 @@ func New(width, height int32) (*Renderer, error) {
 		height:      height,
 		FrameBuffer: make(chan dtos.Frame, 2),
 		pixelBuffer: make([]byte, width*height*2),
+		TouchCursor: make(chan dtos.TouchEvent, 50),
 	}, nil
 }
 
@@ -100,6 +102,8 @@ func (r *Renderer) Draw() error {
 
 	r.updateFPS()
 	r.drawText(10, 10, "FPS: "+itoa(r.fps))
+
+	// r.DrawTouchCursor(<-r.TouchCursor)
 
 	r.renderer.Present()
 	return nil
@@ -176,4 +180,14 @@ func itoa(v int) string {
 
 func (r *Renderer) SetInfos(infos []*Info) {
 	r.Infos = infos
+}
+
+func (r *Renderer) DrawTouchCursor(touchEvent dtos.TouchEvent) {
+
+	// Desenha uma bolinha vermelha onde o dedo está
+	r.renderer.SetDrawColor(255, 0, 0, 255)
+	// Desenho simples de um retângulo pequeno (ou círculo se implementar)
+	rect := sdl.Rect{X: int32(touchEvent.X) - 5, Y: int32(touchEvent.Y) - 5, W: 10, H: 10}
+	r.renderer.FillRect(&rect)
+
 }

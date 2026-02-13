@@ -3,9 +3,10 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand"
+	"time"
 
 	"driveon/displaylink"
+	"driveon/dtos"
 	"driveon/render"
 
 	"github.com/veandco/go-sdl2/sdl"
@@ -17,7 +18,13 @@ const (
 )
 
 type Scene struct {
-	speedInfo, rpmInfo, fuelInfo, tempInfo *render.Info
+	accXInfo,
+	accYInfo,
+	accZInfo,
+	latInfo,
+	longInfo,
+	speedInfo,
+	lightInfo *render.Info
 }
 
 type SmoothValue struct {
@@ -28,10 +35,12 @@ type SmoothValue struct {
 }
 
 type DriveOn struct {
-	render      *render.Renderer
-	displaylink *displaylink.ConnectionManager
-	running     bool
-	scene       Scene
+	render           *render.Renderer
+	displaylink      *displaylink.ConnectionManager
+	running          bool
+	scene            Scene
+	cursorX, cursorY int32
+	isTouching       bool
 }
 
 func main() {
@@ -55,25 +64,32 @@ func (driveON *DriveOn) run() {
 
 	driveON.render = r
 
-	speed := render.NewInfo("Speed", "120 km/h")
-	rpm := render.NewInfo("RPM", "3000")
-	fuel := render.NewInfo("Fuel", "50%")
-	temp := render.NewInfo("Temp", "90°C")
-	gear := render.NewInfo("Gear", "D")
+	speed := render.NewInfo("Speed", "0 km/h")
+	accX := render.NewInfo("AccX", "0")
+	accY := render.NewInfo("AccY", "0")
+	accZ := render.NewInfo("AccZ", "0")
+	lat := render.NewInfo("Lat", "0")
+	lon := render.NewInfo("Lon", "0")
+	light := render.NewInfo("Iluminação", "0")
 
 	driveON.scene = Scene{
 		speedInfo: speed,
-		rpmInfo:   rpm,
-		fuelInfo:  fuel,
-		tempInfo:  temp,
+		lightInfo: light,
+		accXInfo:  accX,
+		accYInfo:  accY,
+		accZInfo:  accZ,
+		latInfo:   lat,
+		longInfo:  lon,
 	}
 
 	r.SetInfos([]*render.Info{
 		speed,
-		rpm,
-		fuel,
-		temp,
-		gear,
+		light,
+		accX,
+		accY,
+		accZ,
+		lat,
+		lon,
 	})
 
 	driveON.running = true
@@ -92,6 +108,9 @@ func (driveON *DriveOn) sendFrameToDisplay() {
 }
 
 func (driveON *DriveOn) mainLoop() {
+	ticker := time.NewTicker(time.Second / 60)
+	defer ticker.Stop()
+
 	for driveON.running {
 		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 			switch event.(type) {
@@ -99,50 +118,83 @@ func (driveON *DriveOn) mainLoop() {
 				driveON.running = false
 			}
 		}
-		driveON.updateInfos()
+		driveON.processNetworkEvents()
+
+		driveON.updateScene()
 
 		if err := driveON.render.Draw(); err != nil {
 			log.Println(err)
 		}
 
-		err := driveON.render.ReadScreen()
-
-		if err != nil {
-			log.Println("Erro ao capturar tela:", err)
+		// 5. Captura tela para enviar de volta
+		select {
+		case <-ticker.C:
+			err := driveON.render.ReadScreen()
+			if err != nil {
+				log.Println(err)
+			}
+		default:
 		}
 
 	}
 }
 
-func (driveON *DriveOn) updateInfos() {
-	var (
-		speed = SmoothValue{Value: 80, Min: 0, Max: 240, Step: 2}
-		rpm   = SmoothValue{Value: 2500, Min: 800, Max: 7000, Step: 150}
-		fuel  = SmoothValue{Value: 50, Min: 0, Max: 100, Step: 1}
-		temp  = SmoothValue{Value: 85, Min: 70, Max: 120, Step: 1}
-	)
+func (driveON *DriveOn) processNetworkEvents() {
+	// Loop para drenar todos os eventos pendentes neste frame
+	// Isso garante que o touch seja suave e não acumule
+	for {
+		select {
+		case touch := <-driveON.displaylink.TouchOutput:
+			driveON.handleTouch(touch)
 
-	speed.Update()
-	rpm.Update()
-	fuel.Update()
-	temp.Update()
+		case telemetry := <-driveON.displaylink.SensorOutput:
+			driveON.handleTelemetry(telemetry)
 
-	driveON.scene.speedInfo.SetValue(fmt.Sprintf("%d km/h", speed.Value))
-	driveON.scene.rpmInfo.SetValue(fmt.Sprintf("%d RPM", rpm.Value))
-	driveON.scene.fuelInfo.SetValue(fmt.Sprintf("%d%%", fuel.Value))
-	driveON.scene.tempInfo.SetValue(fmt.Sprintf("%d°C", temp.Value))
+		default:
+			return // Nada mais para ler
+		}
+	}
 }
 
-func (s *SmoothValue) Update() {
-	delta := rand.Intn(s.Step*2+1) - s.Step // -step .. +step
-	s.Value += delta
+func (driveON *DriveOn) handleTouch(t dtos.TouchEvent) {
+	// Mapeia coordenadas (Se o tablet e PC tiverem resoluções diferentes, ajuste aqui)
+	// Assumindo 1:1 por enquanto
 
-	if s.Value < s.Min {
-		s.Value = s.Min
+	switch t.Action {
+	case 0: // ACTION_DOWN
+		driveON.isTouching = true
+		// Opcional: Injetar clique no SDL
+		// sdl.PushEvent(&sdl.MouseButtonEvent{Type: sdl.MOUSEBUTTONDOWN, Button: sdl.BUTTON_LEFT, X: driveON.cursorX, Y: driveON.cursorY})
+	case 1: // ACTION_UP
+		driveON.isTouching = false
+		// sdl.PushEvent(&sdl.MouseButtonEvent{Type: sdl.MOUSEBUTTONUP, ...})
+	case 2: // ACTION_MOVE
+		// Apenas atualiza coordenadas (já feito acima)
 	}
-	if s.Value > s.Max {
-		s.Value = s.Max
+
+	driveON.render.TouchCursor <- t // Envia para o render desenhar o cursor
+}
+
+func (driveON *DriveOn) handleTelemetry(t dtos.TelemetryData) {
+	// Atualiza a Scene com dados reais!
+
+	driveON.scene.accXInfo.SetValue(fmt.Sprintf("%f", t.AccX))
+	driveON.scene.accYInfo.SetValue(fmt.Sprintf("%f", t.AccY))
+	driveON.scene.accZInfo.SetValue(fmt.Sprintf("%f", t.AccZ))
+
+	// Luz vira "Faróis" ou brilho
+	driveON.scene.lightInfo.SetValue(fmt.Sprintf("%.0f%%", t.Light))
+
+	if t.HasGPS {
+		driveON.scene.latInfo.SetValue(fmt.Sprintf("%.5f", t.Lat))
+		driveON.scene.longInfo.SetValue(fmt.Sprintf("%.5f", t.Lon))
+		driveON.scene.speedInfo.SetValue(fmt.Sprintf("%.0f km/h", t.Speed))
 	}
+}
+
+func (driveON *DriveOn) updateScene() {
+	// Animações que não dependem de sensores continuam aqui
+	// Se quiser misturar dados fakes com reais, faça a lógica aqui
 }
 
 func (driveON *DriveOn) destroy() {

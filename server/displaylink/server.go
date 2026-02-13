@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -14,15 +16,17 @@ import (
 type ConnectionManager struct {
 	Address string
 	// Canais para comunicação com o resto do app (sem locks!)
-	FrameInput  chan dtos.Frame      // Recebe imagens do render
-	TouchOutput chan dtos.TouchEvent // Envia toques para o main
+	FrameInput   chan dtos.Frame      // Recebe imagens do render
+	TouchOutput  chan dtos.TouchEvent // Envia toques para o main
+	SensorOutput chan dtos.TelemetryData
 }
 
 func New(ip, port string) *ConnectionManager {
 	return &ConnectionManager{
-		Address:     ip + ":" + port,
-		FrameInput:  make(chan dtos.Frame, 5), // Buffer pequeno para não acumular lag
-		TouchOutput: make(chan dtos.TouchEvent, 10),
+		Address:      ip + ":" + port,
+		FrameInput:   make(chan dtos.Frame, 5), // Buffer pequeno para não acumular lag
+		TouchOutput:  make(chan dtos.TouchEvent, 50),
+		SensorOutput: make(chan dtos.TelemetryData, 5),
 	}
 }
 
@@ -36,12 +40,12 @@ func (cm *ConnectionManager) Start() {
 			continue
 		}
 
-		if err := cm.handshake(conn); err != nil {
-			log.Printf("Handshake falhou: %v", err)
-			conn.Close()
-			time.Sleep(1 * time.Second)
-			continue
-		}
+		// if err := cm.handshake(conn); err != nil {
+		// 	log.Printf("Handshake falhou: %v", err)
+		// 	conn.Close()
+		// 	time.Sleep(1 * time.Second)
+		// 	continue
+		// }
 
 		// Contexto de erro para sincronizar a queda
 		errChan := make(chan error, 2)
@@ -117,15 +121,79 @@ func (cm *ConnectionManager) writeLoop(conn net.Conn, errChan chan<- error) {
 
 func (cm *ConnectionManager) readLoop(conn net.Conn, errChan chan<- error) {
 	reader := bufio.NewReader(conn)
+
 	for {
+		// Lê até o \n enviado pelo Android
+
 		line, err := reader.ReadString('\n')
+
 		if err != nil {
 			errChan <- err
 			return
 		}
-		// TODO: Parse real do TouchEvent
-		log.Printf("RX: %s", line)
+
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Roteamento de Pacotes
+		if strings.HasPrefix(line, "TOUCH") {
+			cm.parseTouch(line)
+		} else if strings.HasPrefix(line, "T,") {
+			cm.parseTelemetry(line)
+		}
 	}
+}
+
+func (cm *ConnectionManager) parseTouch(line string) {
+	// Formato: TOUCH 100 200 0
+	parts := strings.Split(line, " ")
+	if len(parts) < 4 {
+		return
+	}
+
+	x, _ := strconv.ParseFloat(parts[1], 32)
+	y, _ := strconv.ParseFloat(parts[2], 32)
+	action, _ := strconv.Atoi(parts[3])
+
+	// Envia para o canal (Non-blocking para não travar leitura se o main estiver lento)
+	select {
+	case cm.TouchOutput <- dtos.TouchEvent{X: float32(x), Y: float32(y), Action: action}:
+	default:
+		// Se o canal encher, dropa o touch mais antigo (melhor que lagar)
+	}
+}
+
+func (cm *ConnectionManager) parseTelemetry(line string) {
+	// Formato: T,ax,ay,az,luz,lat,lon,spd
+	parts := strings.Split(line, ",")
+	if len(parts) < 5 {
+		return
+	} // Garante mínimo de sensores
+
+	data := dtos.TelemetryData{}
+
+	// Parse seguro (ignora erros para não crashar)
+	data.AccX, _ = strconv.ParseFloat(parts[1], 64)
+	data.AccY, _ = strconv.ParseFloat(parts[2], 64)
+	data.AccZ, _ = strconv.ParseFloat(parts[3], 64)
+	data.Light, _ = strconv.ParseFloat(parts[4], 64)
+
+	// Se tiver GPS (Android enviou mais dados)
+	if len(parts) >= 8 {
+		data.Lat, _ = strconv.ParseFloat(parts[5], 64)
+		data.Lon, _ = strconv.ParseFloat(parts[6], 64)
+		data.Speed, _ = strconv.ParseFloat(parts[7], 64)
+		data.HasGPS = true
+	}
+
+	// Atualiza o dado mais recente (substitui o antigo se houver)
+	select {
+	case <-cm.SensorOutput: // Esvazia slot velho se tiver
+	default:
+	}
+	cm.SensorOutput <- data
 }
 
 func (cm *ConnectionManager) drainFrames() {
