@@ -36,6 +36,7 @@ public class FrameSurfaceView extends SurfaceView implements SurfaceHolder.Callb
             canvas.drawBitmap(frame, null, dstRect, null);
             holder.unlockCanvasAndPost(canvas);
         }
+        frame.recycle();
     }
 
     @Override

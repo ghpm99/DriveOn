@@ -1,6 +1,8 @@
 package com.driveon;
 
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.util.Log;
 
 import java.io.DataInputStream;
@@ -70,8 +72,6 @@ public class ConnectionManager {
     // RECEPTOR DE VÍDEO + CÁLCULO DE FPS
     private class VideoReceiver implements Runnable {
         private final Socket socket;
-        private byte[] pixelData;
-        private ByteBuffer pixelBuffer;
         private Bitmap reusableBitmap;
 
         public VideoReceiver(Socket s) { this.socket = s; }
@@ -86,21 +86,14 @@ public class ConnectionManager {
 
                 while (running && !socket.isClosed()) {
                     int magic = in.readInt();
-                    if (magic != 0xDEADBEEF) break;
-
-                    int w = in.readInt();
-                    int h = in.readInt();
-                    int size = in.readInt();
-
-                    if (pixelData == null || pixelData.length != size) {
-                        pixelData = new byte[size];
-                        pixelBuffer = ByteBuffer.wrap(pixelData);
-                        reusableBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565);
+                    if (magic != 0xDEADBEEF) {
+                        continue;
                     }
+                    int size = in.readInt();
+                    byte[] jpegData = new byte[size];
+                    in.readFully(jpegData);
 
-                    in.readFully(pixelData);
-                    pixelBuffer.rewind();
-                    reusableBitmap.copyPixelsFromBuffer(pixelBuffer);
+                    reusableBitmap = BitmapFactory.decodeByteArray(jpegData, 0, jpegData.length);
 
                     // Renderiza
                     view.updateFrame(reusableBitmap);
