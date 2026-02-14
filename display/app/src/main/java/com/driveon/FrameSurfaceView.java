@@ -11,12 +11,7 @@ import android.view.SurfaceView;
 public class FrameSurfaceView extends SurfaceView implements SurfaceHolder.Callback {
 
     private final SurfaceHolder holder;
-    private Rect dstRect; // Aloca uma vez
-
-    // Variáveis "Dirty" para o NetworkWorker ler
-    public volatile boolean hasPendingTouch = false;
-    public volatile float touchX, touchY;
-    public volatile int touchAction;
+    private Rect dstRect;
 
     private ConnectionManager connectionManager;
 
@@ -35,12 +30,9 @@ public class FrameSurfaceView extends SurfaceView implements SurfaceHolder.Callb
 
         Canvas canvas = holder.lockCanvas();
         if (canvas != null) {
-            // Inicializa Rect apenas na primeira vez ou se mudar tamanho
             if (dstRect == null) {
                 dstRect = new Rect(0, 0, canvas.getWidth(), canvas.getHeight());
             }
-
-            // Desenha sem filtrar (filter=false é mais rápido e o pixel art fica nítido)
             canvas.drawBitmap(frame, null, dstRect, null);
             holder.unlockCanvasAndPost(canvas);
         }
@@ -50,20 +42,14 @@ public class FrameSurfaceView extends SurfaceView implements SurfaceHolder.Callb
     public boolean onTouchEvent(MotionEvent event) {
         if (connectionManager == null) return true;
 
-        int action = event.getActionMasked();
+        // Cria o evento e joga na fila instantaneamente
+        TouchEvent touch = new TouchEvent(
+                event.getX(),
+                event.getY(),
+                event.getActionMasked()
+        );
 
-        // Otimização: Não precisamos de TODOS os moves se o Tablet for lento.
-        // Mas para desenhar preciso, enviamos todos. O buffer TCP segura a onda.
-
-        // Formata string "TOUCH X Y ACTION\n"
-        // StringBuilder local é rápido na UI Thread
-        String sb = "TOUCH " +
-                (int) event.getX() + " " +
-                (int) event.getY() + " " +
-                action + "\n";
-
-        // Adiciona na fila Thread-Safe (não bloqueia a UI)
-        connectionManager.touchQueue.offer(sb);
+        connectionManager.touchQueue.offer(touch);
 
         return true;
     }

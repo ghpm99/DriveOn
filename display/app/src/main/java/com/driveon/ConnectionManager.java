@@ -3,18 +3,20 @@ package com.driveon;
 import android.graphics.Bitmap;
 import android.util.Log;
 
-import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class ConnectionManager {
 
-    // Fila Thread-Safe para o Touch (Garante ordem e não perde cliques)
-    public final LinkedBlockingQueue<String> touchQueue = new LinkedBlockingQueue<String>();
+    // Fila agora recebe nosso objeto otimizado
+    public final LinkedBlockingQueue<TouchEvent> touchQueue = new LinkedBlockingQueue<TouchEvent>();
+
     private final FrameSurfaceView view;
     private final TelemetryManager telemetry;
     private ServerSocket serverSocket;
@@ -33,13 +35,9 @@ public class ConnectionManager {
 
     public void stop() {
         running = false;
-        try {
-            if (serverSocket != null) serverSocket.close();
-        } catch (Exception e) {
-        }
+        try { if (serverSocket != null) serverSocket.close(); } catch (Exception e) {}
     }
 
-    // Thread 1: Aguarda conexão e inicia os trabalhos
     private class ConnectionListener implements Runnable {
         @Override
         public void run() {
@@ -49,54 +47,45 @@ public class ConnectionManager {
 
                 while (running) {
                     clientSocket = serverSocket.accept();
-                    clientSocket.setTcpNoDelay(true); // Vital para latência
-                    clientSocket.setSoTimeout(0); // Leitura bloqueante infinita (vídeo)
+                    clientSocket.setTcpNoDelay(true);
+                    clientSocket.setSoTimeout(0);
 
                     Log.d("DriveOn", "Conectado! Iniciando Threads IO.");
 
-                    // Inicia as duas vias separadas
                     Thread receiver = new Thread(new VideoReceiver(clientSocket));
                     Thread transmitter = new Thread(new DataTransmitter(clientSocket));
 
                     receiver.start();
                     transmitter.start();
 
-                    // Aguarda uma delas morrer (monitoramento simples)
                     receiver.join();
 
-                    // Cleanup
                     transmitter.interrupt();
                     clientSocket.close();
                 }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            } catch (Exception e) { e.printStackTrace(); }
         }
     }
 
-    // Thread 2: RECEPTOR DE VÍDEO (Alta prioridade, consome muita banda)
+    // RECEPTOR DE VÍDEO + CÁLCULO DE FPS
     private class VideoReceiver implements Runnable {
         private final Socket socket;
         private byte[] pixelData;
         private ByteBuffer pixelBuffer;
         private Bitmap reusableBitmap;
 
-        public VideoReceiver(Socket s) {
-            this.socket = s;
-        }
+        public VideoReceiver(Socket s) { this.socket = s; }
 
         @Override
         public void run() {
             try {
                 DataInputStream in = new DataInputStream(socket.getInputStream());
 
-                // Handshake Entrada (Lê HELLO)
-                // ... (Implementar leitura do HELLO se necessário, ou assumir conexao ok)
-                String line = in.readLine();
-                if (!"HELLO".equals(line)) throw new IOException("Invalid handshake");
+                long lastFpsTime = System.currentTimeMillis();
+                int framesRendered = 0;
 
                 while (running && !socket.isClosed()) {
-                    int magic = in.readInt(); // Bloqueia aqui esperando dados
+                    int magic = in.readInt();
                     if (magic != 0xDEADBEEF) break;
 
                     int w = in.readInt();
@@ -110,90 +99,112 @@ public class ConnectionManager {
                     }
 
                     in.readFully(pixelData);
-
                     pixelBuffer.rewind();
                     reusableBitmap.copyPixelsFromBuffer(pixelBuffer);
+
+                    // Renderiza
                     view.updateFrame(reusableBitmap);
+                    framesRendered++;
+
+                    // --- CALCULA FPS A CADA 1 SEGUNDO ---
+                    long now = System.currentTimeMillis();
+                    if (now - lastFpsTime >= 1000) {
+                        telemetry.currentFps = framesRendered; // Salva para o transmissor enviar
+                        Log.d("DriveOn", "FPS Consumido: " + framesRendered);
+                        framesRendered = 0;
+                        lastFpsTime = now;
+                    }
                 }
-            } catch (IOException e) {
-                Log.e("VideoRx", "Erro: " + e.getMessage());
-            }
+            } catch (IOException e) { Log.e("VideoRx", "Erro: " + e.getMessage()); }
         }
     }
 
-    // Thread 3: TRANSMISSOR DE DADOS (Touch + Sensores)
-    // Controla a taxa de envio (20Hz sensores, Touch imediato)
+    // TRANSMISSOR DE DADOS (Protocolo Binário Modular)
     private class DataTransmitter implements Runnable {
         private final Socket socket;
-        private final StringBuilder sb = new StringBuilder(128);
+
+        // Aloca os Buffers exatamente com o tamanho dos nossos "Pacotes"
+        // 13 bytes: 1(Tipo) + 4(X) + 4(Y) + 4(Action)
+        private final ByteBuffer touchBuffer = ByteBuffer.allocate(13);
+
+        // 25 bytes: 1(Tipo) + 12(Acc) + 12(Mag)
+        private final ByteBuffer fastBuffer = ByteBuffer.allocate(25);
+
+        // 33 bytes: 1(Tipo) + 4(Light) + 4(Bat) + 8(Lat) + 8(Lon) + 4(Speed) + 4(FPS)
+        private final ByteBuffer slowBuffer = ByteBuffer.allocate(33);
 
         public DataTransmitter(Socket s) {
             this.socket = s;
+            // Configura todos para Little Endian (Padrão Go/C/x86)
+            touchBuffer.order(ByteOrder.LITTLE_ENDIAN);
+            fastBuffer.order(ByteOrder.LITTLE_ENDIAN);
+            slowBuffer.order(ByteOrder.LITTLE_ENDIAN);
         }
 
         @Override
         public void run() {
             try {
-                BufferedOutputStream out = new BufferedOutputStream(socket.getOutputStream());
+                // Usando OutputStream direto (mais controle sobre envios binários imediatos)
+                OutputStream out = socket.getOutputStream();
 
-                // Handshake Saída
-                out.write("WELCOME\n".getBytes());
-                out.flush();
-
-                long lastSensorTime = 0;
-                long SENSOR_INTERVAL_MS = 50; // 20Hz (1000ms / 20)
+                long lastFastTime = 0;
+                long lastSlowTime = 0;
 
                 while (running && !socket.isClosed()) {
                     boolean sentData = false;
                     long now = System.currentTimeMillis();
 
-                    // 1. Prioridade: Esvaziar a fila de Touch
-                    // Drena toda a fila para não acumular lag
+                    // 1. EVENTO: Touch (Alta Prioridade)
                     while (!touchQueue.isEmpty()) {
-                        String touchCmd = touchQueue.poll();
-                        if (touchCmd != null) {
-                            out.write(touchCmd.getBytes());
+                        TouchEvent t = touchQueue.poll();
+                        if (t != null) {
+                            touchBuffer.clear();
+                            touchBuffer.put((byte) 0x01); // Header 0x01
+                            touchBuffer.putFloat(t.x);
+                            touchBuffer.putFloat(t.y);
+                            touchBuffer.putInt(t.action);
+                            out.write(touchBuffer.array(), 0, touchBuffer.position());
                             sentData = true;
                         }
                     }
 
-                    // 2. Verifica se é hora de enviar Sensores (20Hz)
-                    if (now - lastSensorTime >= SENSOR_INTERVAL_MS) {
-                        lastSensorTime = now;
-
-                        // Monta pacote de Sensores (T,accX,accY...)
-                        sb.setLength(0);
-                        sb.append("T,");
-                        sb.append(format(telemetry.accX)).append(",");
-                        sb.append(format(telemetry.accY)).append(","); // Y invertido se necessário
-                        // ... outros sensores
-                        sb.append("\n");
-
-                        out.write(sb.toString().getBytes());
+                    // 2. POLLING RÁPIDO: Sensores Físicos (ex: 30ms = ~33Hz)
+                    if (now - lastFastTime >= 30) {
+                        lastFastTime = now;
+                        fastBuffer.clear();
+                        fastBuffer.put((byte) 0x02); // Header 0x02
+                        fastBuffer.putFloat(telemetry.accX);
+                        fastBuffer.putFloat(telemetry.accY);
+                        fastBuffer.putFloat(telemetry.accZ);
+                        fastBuffer.putFloat(telemetry.magX);
+                        fastBuffer.putFloat(telemetry.magY);
+                        fastBuffer.putFloat(telemetry.magZ);
+                        out.write(fastBuffer.array(), 0, fastBuffer.position());
                         sentData = true;
                     }
 
-                    // 3. Flush e Sleep Inteligente
+                    // 3. POLLING LENTO: Sistema e GPS (ex: 1000ms = 1Hz)
+                    if (now - lastSlowTime >= 1000) {
+                        lastSlowTime = now;
+                        slowBuffer.clear();
+                        slowBuffer.put((byte) 0x03); // Header 0x03
+                        slowBuffer.putFloat(telemetry.light);
+                        slowBuffer.putInt(telemetry.batteryLevel);
+                        slowBuffer.putDouble(telemetry.lat);
+                        slowBuffer.putDouble(telemetry.lon);
+                        slowBuffer.putFloat(telemetry.speed);
+                        slowBuffer.putInt(telemetry.currentFps); // Envia o FPS pro Go
+                        out.write(slowBuffer.array(), 0, slowBuffer.position());
+                        sentData = true;
+                    }
+
                     if (sentData) {
                         out.flush();
                     } else {
-                        // Se não tem nada pra fazer, dorme um pouco para economizar CPU
-                        // Dorme 5ms (aprox 200Hz de polling rate no touch)
-                        try {
-                            Thread.sleep(5);
-                        } catch (InterruptedException e) {
-                            break;
-                        }
+                        try { Thread.sleep(5); } catch (InterruptedException e) { break; }
                     }
                 }
-            } catch (IOException e) {
-                Log.e("DataTx", "Erro: " + e.getMessage());
-            }
-        }
-
-        // Formatação rápida (evita String.format lento)
-        private String format(float val) {
-            return Float.toString(val); // Pode otimizar depois se precisar
+            } catch (IOException e) { Log.e("DataTx", "Erro: " + e.getMessage()); }
         }
     }
 }
