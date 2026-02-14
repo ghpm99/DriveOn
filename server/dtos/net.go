@@ -16,9 +16,18 @@ type FrameHeader struct {
 }
 
 type TelemetryData struct {
-	AccX, AccY, AccZ float64
-	Light            float64
-	Lat, Lon         float64
-	Speed            float64
-	HasGPS           bool
+	Type    string // "FAST" ou "SLOW"
+	AccX    float64
+	AccY    float64
+	AccZ    float64
+	MagX    float64
+	MagY    float64
+	MagZ    float64
+	Light   float64
+	Battery int
+	Lat     float64
+	Lon     float64
+	Speed   float64
+	FPS     int
+	HasGPS  bool
 }

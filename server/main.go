@@ -24,23 +24,20 @@ type Scene struct {
 	latInfo,
 	longInfo,
 	speedInfo,
-	lightInfo *render.Info
+	lightInfo,
+	batteryInfo,
+	androidFpsInfo *render.Info
 }
 
-type SmoothValue struct {
-	Value int
-	Min   int
-	Max   int
-	Step  int
-}
+// Guarda o estado atual para que o render do G-Force ou UI não pisque
+var currentTelemetry dtos.TelemetryData
 
 type DriveOn struct {
-	render           *render.Renderer
-	displaylink      *displaylink.ConnectionManager
-	running          bool
-	scene            Scene
-	cursorX, cursorY int32
-	isTouching       bool
+	render      *render.Renderer
+	displaylink *displaylink.ConnectionManager
+	running     bool
+	scene       Scene
+	isTouching  bool
 }
 
 func main() {
@@ -51,7 +48,6 @@ func main() {
 }
 
 func (driveON *DriveOn) run() {
-
 	defer driveON.destroy()
 
 	r, err := render.New(screenWidth, screenHeight)
@@ -59,7 +55,7 @@ func (driveON *DriveOn) run() {
 		log.Fatal(err)
 	}
 
-	driveON.displaylink = displaylink.New("192.168.42.129", "9000")
+	driveON.displaylink = displaylink.New("192.168.42.129", "9000") // Substitua pelo IP real
 	go driveON.displaylink.Start()
 
 	driveON.render = r
@@ -70,26 +66,24 @@ func (driveON *DriveOn) run() {
 	accZ := render.NewInfo("AccZ", "0")
 	lat := render.NewInfo("Lat", "0")
 	lon := render.NewInfo("Lon", "0")
-	light := render.NewInfo("Iluminação", "0")
+	light := render.NewInfo("Luz", "0")
+	battery := render.NewInfo("Bateria", "0%")
+	androidFps := render.NewInfo("Android FPS", "0")
 
 	driveON.scene = Scene{
-		speedInfo: speed,
-		lightInfo: light,
-		accXInfo:  accX,
-		accYInfo:  accY,
-		accZInfo:  accZ,
-		latInfo:   lat,
-		longInfo:  lon,
+		speedInfo:      speed,
+		lightInfo:      light,
+		accXInfo:       accX,
+		accYInfo:       accY,
+		accZInfo:       accZ,
+		latInfo:        lat,
+		longInfo:       lon,
+		batteryInfo:    battery,
+		androidFpsInfo: androidFps,
 	}
 
 	r.SetInfos([]*render.Info{
-		speed,
-		light,
-		accX,
-		accY,
-		accZ,
-		lat,
-		lon,
+		speed, light, battery, androidFps, accX, accY, accZ, lat, lon,
 	})
 
 	driveON.running = true
@@ -108,7 +102,7 @@ func (driveON *DriveOn) sendFrameToDisplay() {
 }
 
 func (driveON *DriveOn) mainLoop() {
-	ticker := time.NewTicker(time.Second / 60)
+	ticker := time.NewTicker(time.Second / 60) // 60 FPS no PC
 	defer ticker.Stop()
 
 	for driveON.running {
@@ -118,88 +112,85 @@ func (driveON *DriveOn) mainLoop() {
 				driveON.running = false
 			}
 		}
+
+		// 1. Drena rede (Touch e Sensores)
 		driveON.processNetworkEvents()
 
+		// 2. Lógica local e UI
 		driveON.updateScene()
 
+		// 3. Renderiza no PC (E processa a lógica de timeout do cursor de touch)
 		if err := driveON.render.Draw(); err != nil {
-			log.Println(err)
+			log.Println("Erro de render:", err)
 		}
 
-		// 5. Captura tela para enviar de volta
+		// 4. Captura tela para enviar de volta a 60hz
 		select {
 		case <-ticker.C:
 			err := driveON.render.ReadScreen()
 			if err != nil {
-				log.Println(err)
+				log.Println("Erro ao ler tela:", err)
 			}
 		default:
 		}
-
 	}
 }
 
 func (driveON *DriveOn) processNetworkEvents() {
-	// Loop para drenar todos os eventos pendentes neste frame
-	// Isso garante que o touch seja suave e não acumule
 	for {
 		select {
 		case touch := <-driveON.displaylink.TouchOutput:
-			driveON.handleTouch(touch)
+			// Envia direto pro Renderer lidar com estado e timeout
+			driveON.render.TouchCursor <- touch
 
 		case telemetry := <-driveON.displaylink.SensorOutput:
 			driveON.handleTelemetry(telemetry)
 
 		default:
-			return // Nada mais para ler
+			return // Fila vazia, volta pro mainLoop
 		}
 	}
 }
 
-func (driveON *DriveOn) handleTouch(t dtos.TouchEvent) {
-	// Mapeia coordenadas (Se o tablet e PC tiverem resoluções diferentes, ajuste aqui)
-	// Assumindo 1:1 por enquanto
-
-	switch t.Action {
-	case 0: // ACTION_DOWN
-		driveON.isTouching = true
-		// Opcional: Injetar clique no SDL
-		// sdl.PushEvent(&sdl.MouseButtonEvent{Type: sdl.MOUSEBUTTONDOWN, Button: sdl.BUTTON_LEFT, X: driveON.cursorX, Y: driveON.cursorY})
-	case 1: // ACTION_UP
-		driveON.isTouching = false
-		// sdl.PushEvent(&sdl.MouseButtonEvent{Type: sdl.MOUSEBUTTONUP, ...})
-	case 2: // ACTION_MOVE
-		// Apenas atualiza coordenadas (já feito acima)
-	}
-
-	driveON.render.TouchCursor <- t // Envia para o render desenhar o cursor
-}
-
 func (driveON *DriveOn) handleTelemetry(t dtos.TelemetryData) {
-	// Atualiza a Scene com dados reais!
-
-	driveON.scene.accXInfo.SetValue(fmt.Sprintf("%f", t.AccX))
-	driveON.scene.accYInfo.SetValue(fmt.Sprintf("%f", t.AccY))
-	driveON.scene.accZInfo.SetValue(fmt.Sprintf("%f", t.AccZ))
-
-	// Luz vira "Faróis" ou brilho
-	driveON.scene.lightInfo.SetValue(fmt.Sprintf("%.0f%%", t.Light))
-
-	if t.HasGPS {
-		driveON.scene.latInfo.SetValue(fmt.Sprintf("%.5f", t.Lat))
-		driveON.scene.longInfo.SetValue(fmt.Sprintf("%.5f", t.Lon))
-		driveON.scene.speedInfo.SetValue(fmt.Sprintf("%.0f km/h", t.Speed))
+	// Mescla dados parciais (Fast ou Slow) no estado global
+	if t.Type == "FAST" {
+		currentTelemetry.AccX = t.AccX
+		currentTelemetry.AccY = t.AccY
+		currentTelemetry.AccZ = t.AccZ
+		currentTelemetry.MagX = t.MagX
+		currentTelemetry.MagY = t.MagY
+		currentTelemetry.MagZ = t.MagZ
+	} else if t.Type == "SLOW" {
+		currentTelemetry.Light = t.Light
+		currentTelemetry.Battery = t.Battery
+		currentTelemetry.Lat = t.Lat
+		currentTelemetry.Lon = t.Lon
+		currentTelemetry.Speed = t.Speed
+		currentTelemetry.FPS = t.FPS
+		currentTelemetry.HasGPS = t.HasGPS
 	}
 }
 
 func (driveON *DriveOn) updateScene() {
-	// Animações que não dependem de sensores continuam aqui
-	// Se quiser misturar dados fakes com reais, faça a lógica aqui
+	// Atualiza os textos da tela com os dados combinados mais recentes
+	driveON.scene.accXInfo.SetValue(fmt.Sprintf("%.2f", currentTelemetry.AccX))
+	driveON.scene.accYInfo.SetValue(fmt.Sprintf("%.2f", currentTelemetry.AccY))
+	driveON.scene.accZInfo.SetValue(fmt.Sprintf("%.2f", currentTelemetry.AccZ))
+
+	driveON.scene.lightInfo.SetValue(fmt.Sprintf("%.0f lx", currentTelemetry.Light))
+	driveON.scene.batteryInfo.SetValue(fmt.Sprintf("%d%%", currentTelemetry.Battery))
+	driveON.scene.androidFpsInfo.SetValue(fmt.Sprintf("%d", currentTelemetry.FPS))
+
+	if currentTelemetry.HasGPS {
+		driveON.scene.latInfo.SetValue(fmt.Sprintf("%.5f", currentTelemetry.Lat))
+		driveON.scene.longInfo.SetValue(fmt.Sprintf("%.5f", currentTelemetry.Lon))
+		driveON.scene.speedInfo.SetValue(fmt.Sprintf("%.0f km/h", currentTelemetry.Speed))
+	}
 }
 
 func (driveON *DriveOn) destroy() {
 	if driveON.render != nil {
 		driveON.render.Destroy()
 	}
-
 }

@@ -10,6 +10,12 @@ import (
 	"github.com/veandco/go-sdl2/ttf"
 )
 
+type TouchState struct {
+	X, Y       int32
+	IsActive   bool
+	LastUpdate time.Time
+}
+
 type Renderer struct {
 	window            *sdl.Window
 	renderer          *sdl.Renderer
@@ -24,25 +30,21 @@ type Renderer struct {
 	FrameBuffer       chan dtos.Frame
 	pixelBuffer       []byte
 	TouchCursor       chan dtos.TouchEvent
+
+	// Estado do Cursor
+	currentTouch TouchState
 }
 
 func New(width, height int32) (*Renderer, error) {
+	// ... (Mesma inicialização do SDL2) ...
 	if err := sdl.Init(sdl.INIT_VIDEO); err != nil {
 		return nil, err
 	}
-
 	if err := ttf.Init(); err != nil {
 		return nil, err
 	}
 
-	w, err := sdl.CreateWindow(
-		"DriveOn MVP",
-		sdl.WINDOWPOS_CENTERED,
-		sdl.WINDOWPOS_CENTERED,
-		width,
-		height,
-		sdl.WINDOW_SHOWN,
-	)
+	w, err := sdl.CreateWindow("DriveOn MVP", sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED, width, height, sdl.WINDOW_SHOWN)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +75,9 @@ func New(width, height int32) (*Renderer, error) {
 
 func (r *Renderer) Destroy() {
 	r.font.Close()
-	r.backgroundTexture.Destroy()
+	if r.backgroundTexture != nil {
+		r.backgroundTexture.Destroy()
+	}
 	r.renderer.Destroy()
 	r.window.Destroy()
 	ttf.Quit()
@@ -81,35 +85,67 @@ func (r *Renderer) Destroy() {
 }
 
 func (r *Renderer) Draw() error {
-	// fundo
 	if r.backgroundTexture == nil {
-
-		if err := r.InitTexture(); err != nil {
+		if err := r.InitTexture(); err != nil { // Assumindo que InitTexture já existe no seu código
 			return err
 		}
 	}
 	r.renderer.Clear()
-	r.renderer.Copy(r.backgroundTexture, nil, nil)
+	if r.backgroundTexture != nil {
+		r.renderer.Copy(r.backgroundTexture, nil, nil)
+	}
 
 	if r.Infos != nil {
-		r.drawInfos(
-			r.Infos,
-			10,
-			80,
-			60,
-		)
+		r.drawInfos(r.Infos, 10, 80, 60) // Assumindo que drawInfos existe
 	}
 
 	r.updateFPS()
-	r.drawText(10, 10, "FPS: "+itoa(r.fps))
+	r.drawText(10, 10, "PC FPS: "+itoa(r.fps))
 
-	// r.DrawTouchCursor(<-r.TouchCursor)
+	// LÓGICA DE CURSOR TOUCH NÃO-BLOQUEANTE
+	r.processTouchCursor()
 
 	r.renderer.Present()
 	return nil
 }
 
+// processTouchCursor lê o canal de toques sem travar e desenha se estiver ativo
+func (r *Renderer) processTouchCursor() {
+	// 1. Lê a fila de eventos sem bloquear (O Pulo do Gato)
+	for {
+		select {
+		case event := <-r.TouchCursor:
+			r.currentTouch.X = int32(event.X)
+			r.currentTouch.Y = int32(event.Y)
+
+			if event.Action == 1 { // ACTION_UP (Dedo soltou)
+				r.currentTouch.IsActive = false
+			} else { // ACTION_DOWN ou ACTION_MOVE
+				r.currentTouch.IsActive = true
+				r.currentTouch.LastUpdate = time.Now()
+			}
+		default:
+			// Não há mais eventos na fila, saia do loop interno
+			goto DrawStep
+		}
+	}
+
+DrawStep:
+	// 2. TIMEOUT: Se a rede lagar e perdermos o ACTION_UP, apaga o cursor após 200ms
+	if r.currentTouch.IsActive && time.Since(r.currentTouch.LastUpdate) > 200*time.Millisecond {
+		r.currentTouch.IsActive = false
+	}
+
+	// 3. DESENHO
+	if r.currentTouch.IsActive {
+		r.renderer.SetDrawColor(255, 0, 0, 255) // Vermelho
+		rect := sdl.Rect{X: r.currentTouch.X - 5, Y: r.currentTouch.Y - 5, W: 10, H: 10}
+		r.renderer.FillRect(&rect)
+	}
+}
+
 func (r *Renderer) ReadScreen() error {
+	// ...(Seu código original de ReadScreen)...
 	w, h, _ := r.renderer.GetOutputSize()
 
 	requiredSize := int(w * h * 2)
@@ -117,13 +153,7 @@ func (r *Renderer) ReadScreen() error {
 		r.pixelBuffer = make([]byte, requiredSize)
 	}
 
-	err := r.renderer.ReadPixels(
-		nil,
-		sdl.PIXELFORMAT_RGB565,
-		unsafe.Pointer(&r.pixelBuffer[0]),
-		int(w)*2,
-	)
-
+	err := r.renderer.ReadPixels(nil, sdl.PIXELFORMAT_RGB565, unsafe.Pointer(&r.pixelBuffer[0]), int(w)*2)
 	if err != nil {
 		return err
 	}
@@ -131,13 +161,7 @@ func (r *Renderer) ReadScreen() error {
 	dataToSend := make([]byte, requiredSize)
 	copy(dataToSend, r.pixelBuffer)
 
-	r.FrameBuffer <- dtos.Frame{
-		Data:      dataToSend,
-		Width:     w,
-		Height:    h,
-		FrameSize: int32(requiredSize),
-	}
-
+	r.FrameBuffer <- dtos.Frame{Data: dataToSend, Width: w, Height: h, FrameSize: int32(requiredSize)}
 	return nil
 }
 
@@ -151,6 +175,7 @@ func (r *Renderer) updateFPS() {
 }
 
 func (r *Renderer) drawText(x, y int32, text string) error {
+	// ...(Seu código original de drawText)...
 	color := sdl.Color{R: 200, G: 200, B: 200, A: 255}
 	surface, err := r.font.RenderUTF8Blended(text, color)
 	if err != nil {
@@ -164,30 +189,10 @@ func (r *Renderer) drawText(x, y int32, text string) error {
 	}
 	defer texture.Destroy()
 
-	dst := sdl.Rect{
-		X: x,
-		Y: y,
-		W: surface.W,
-		H: surface.H,
-	}
-
+	dst := sdl.Rect{X: x, Y: y, W: surface.W, H: surface.H}
 	return r.renderer.Copy(texture, nil, &dst)
 }
 
-func itoa(v int) string {
-	return fmt.Sprintf("%d", v)
-}
+func itoa(v int) string { return fmt.Sprintf("%d", v) }
 
-func (r *Renderer) SetInfos(infos []*Info) {
-	r.Infos = infos
-}
-
-func (r *Renderer) DrawTouchCursor(touchEvent dtos.TouchEvent) {
-
-	// Desenha uma bolinha vermelha onde o dedo está
-	r.renderer.SetDrawColor(255, 0, 0, 255)
-	// Desenho simples de um retângulo pequeno (ou círculo se implementar)
-	rect := sdl.Rect{X: int32(touchEvent.X) - 5, Y: int32(touchEvent.Y) - 5, W: 10, H: 10}
-	r.renderer.FillRect(&rect)
-
-}
+func (r *Renderer) SetInfos(infos []*Info) { r.Infos = infos }
