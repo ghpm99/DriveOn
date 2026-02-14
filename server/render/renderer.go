@@ -2,7 +2,10 @@ package render
 
 import (
 	"driveon/dtos"
+	"encoding/binary"
 	"fmt"
+	"image"
+	"image/color"
 	"time"
 	"unsafe"
 
@@ -125,18 +128,15 @@ func (r *Renderer) processTouchCursor() {
 				r.currentTouch.LastUpdate = time.Now()
 			}
 		default:
-			// Não há mais eventos na fila, saia do loop interno
 			goto DrawStep
 		}
 	}
 
 DrawStep:
-	// 2. TIMEOUT: Se a rede lagar e perdermos o ACTION_UP, apaga o cursor após 200ms
 	if r.currentTouch.IsActive && time.Since(r.currentTouch.LastUpdate) > 200*time.Millisecond {
 		r.currentTouch.IsActive = false
 	}
 
-	// 3. DESENHO
 	if r.currentTouch.IsActive {
 		r.renderer.SetDrawColor(255, 0, 0, 255) // Vermelho
 		rect := sdl.Rect{X: r.currentTouch.X - 5, Y: r.currentTouch.Y - 5, W: 10, H: 10}
@@ -144,8 +144,39 @@ DrawStep:
 	}
 }
 
+func (r *Renderer) GetAsImage() error {
+	w, h, _ := r.renderer.GetOutputSize()
+
+	requiredSize := int(w * h * 2)
+	if len(r.pixelBuffer) < requiredSize {
+		r.pixelBuffer = make([]byte, requiredSize)
+	}
+
+	err := r.renderer.ReadPixels(nil, sdl.PIXELFORMAT_RGB565, unsafe.Pointer(&r.pixelBuffer[0]), int(w)*2)
+	if err != nil {
+		return err
+	}
+
+	img := image.NewRGBA(image.Rect(0, 0, int(r.width), int(r.height)))
+
+	for y := 0; y < int(r.height); y++ {
+		for x := 0; x < int(r.width); x++ {
+			idx := (y*int(r.width) + x) * 2
+			p := binary.LittleEndian.Uint16(r.pixelBuffer[idx:])
+
+			r5 := uint8((p>>11)&0x1F) << 3
+			g6 := uint8((p>>5)&0x3F) << 2
+			b5 := uint8(p&0x1F) << 3
+
+			img.SetRGBA(x, y, color.RGBA{r5, g6, b5, 255})
+		}
+	}
+	r.FrameBuffer <- dtos.Frame{Image: img}
+	return nil
+}
+
 func (r *Renderer) ReadScreen() error {
-	// ...(Seu código original de ReadScreen)...
+
 	w, h, _ := r.renderer.GetOutputSize()
 
 	requiredSize := int(w * h * 2)
@@ -175,7 +206,7 @@ func (r *Renderer) updateFPS() {
 }
 
 func (r *Renderer) drawText(x, y int32, text string) error {
-	// ...(Seu código original de drawText)...
+
 	color := sdl.Color{R: 200, G: 200, B: 200, A: 255}
 	surface, err := r.font.RenderUTF8Blended(text, color)
 	if err != nil {

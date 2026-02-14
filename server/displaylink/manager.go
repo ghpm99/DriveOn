@@ -2,9 +2,11 @@ package displaylink
 
 import (
 	"bufio"
+	"bytes"
 	"driveon/dtos"
 	"encoding/binary"
 	"fmt"
+	"image/jpeg"
 	"log"
 	"net"
 	"time"
@@ -68,25 +70,27 @@ func (cm *ConnectionManager) Start() {
 }
 
 func (cm *ConnectionManager) writeLoop(conn net.Conn, errChan chan<- error) {
-	headerBuf := make([]byte, 16)
-	writer := bufio.NewWriterSize(conn, 65536) // Buffer grande para video
+	var buf bytes.Buffer
+	headerBuf := make([]byte, 8)
 
 	for frameData := range cm.FrameInput {
-		// BigEndian aqui pois o DataInputStream.readInt() do Java usa BigEndian por padrão
-		binary.BigEndian.PutUint32(headerBuf[0:], 0xDEADBEEF)
-		binary.BigEndian.PutUint32(headerBuf[4:], uint32(frameData.Width))
-		binary.BigEndian.PutUint32(headerBuf[8:], uint32(frameData.Height))
-		binary.BigEndian.PutUint32(headerBuf[12:], uint32(frameData.FrameSize))
+		buf.Reset()
 
-		if _, err := writer.Write(headerBuf); err != nil {
+		err := jpeg.Encode(&buf, frameData.Image, &jpeg.Options{Quality: 60})
+		if err != nil {
+			continue
+		}
+
+		jpegBytes := buf.Bytes()
+
+		binary.BigEndian.PutUint32(headerBuf[0:], 0xDEADBEEF)
+		binary.BigEndian.PutUint32(headerBuf[4:], uint32(len(jpegBytes)))
+
+		if _, err := conn.Write(headerBuf); err != nil {
 			errChan <- err
 			return
 		}
-		if _, err := writer.Write(frameData.Data); err != nil {
-			errChan <- err
-			return
-		}
-		if err := writer.Flush(); err != nil {
+		if _, err := conn.Write(jpegBytes); err != nil {
 			errChan <- err
 			return
 		}

@@ -127,7 +127,7 @@ func (driveON *DriveOn) mainLoop() {
 		// 4. Captura tela para enviar de volta a 60hz
 		select {
 		case <-ticker.C:
-			err := driveON.render.ReadScreen()
+			err := driveON.render.GetAsImage()
 			if err != nil {
 				log.Println("Erro ao ler tela:", err)
 			}
